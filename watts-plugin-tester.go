@@ -123,7 +123,7 @@ func specificJson() (inputJson []byte) {
 func doPluginTestAction(pluginName string) {
 	fmt.Println("testing ", pluginName, "->", *pluginTestAction)
 
-	inputBase64 := base64.StdEncoding.EncodeToString(defaultJson())
+	inputBase64 := base64.StdEncoding.EncodeToString(specificJson())
 
 	out, err := exec.Command(pluginName, inputBase64).Output()
 	if err != nil {
