@@ -32,13 +32,16 @@ type PluginInput struct {
 
 var (
 	app = kingpin.New("watts-plugin-tester", "usage message")
-	pluginTest = app.Command("test", "test plugin")
-	pluginTestName = pluginTest.Arg("pluginName", "Name of the plugin to test").Required().String()
-	pluginTestAction = pluginTest.Arg("pluginAction", "The plugin action to be tested. If not supplied all actions will be tested").String()
+	pluginTestAction = app.Flag("plugin-action", "The plugin action to be tested. Defaults to \"parameter\"").Default("parameter").Short('a').String()
 
-	actions = []string{"parameter"}
+	pluginTest = app.Command("test", "test a plugin")
+	pluginTestName = pluginTest.Arg("pluginName", "Name of the plugin to test").Required().String()
+	pluginInputOverride = pluginTest.Flag("json", "Use user provided json to override the inbuilt one").Short('j').String()
+
+	printDefault = app.Command("default", "print the default plugin input as json")
+
 	userId = "max_mustermann"
-	pluginInput = PluginInput{
+	defaultPluginInput = PluginInput{
 		WattsVersion: "1.0",
 		ConfParams: "{}",
 		Params: "{}",
@@ -52,6 +55,8 @@ var (
 			Sub: "123456789",
 		},
 	}
+
+	pluginInput PluginInput
 
 	schemes =  map[string]v.Validator{
 		"parameter": v.Object(
@@ -79,24 +84,29 @@ var (
 	}
 )
 
-func validateAction(action string, pluginOutput interface{}) {
+func defaultJson() (inputJson []byte) {
+	pluginInput := defaultPluginInput
+
+
+	pluginInput.Action = *pluginTestAction
+	pluginInput.WattsUserid = base64.StdEncoding.EncodeToString([]byte(userId))
+
+	inputJson, _ = json.Marshal(pluginInput)
+	return
 }
 
-func doPluginTest(pluginName string) {
-	fmt.Println("testing plugin ", pluginName)
-
-	for _, action := range actions {
-		doPluginTestAction(pluginName, action)
-	}
-}
 
 func doPluginTestAction(pluginName string, actionName string) (result string) {
 	fmt.Println("testing ", pluginName, "->", actionName)
+
+	pluginInput = defaultPluginInput
+
 
 	pluginInput.Action = actionName
 	pluginInput.WattsUserid = base64.StdEncoding.EncodeToString([]byte(userId))
 
 	inputJson, _ := json.Marshal(pluginInput)
+
 	inputBase64 := base64.StdEncoding.EncodeToString([]byte(inputJson))
 
 	out, err := exec.Command(pluginName, inputBase64).Output()
@@ -124,6 +134,8 @@ func doPluginTestAction(pluginName string, actionName string) (result string) {
 func main() {
 	switch kingpin.MustParse(app.Parse(os.Args[1:])) {
 	case pluginTest.FullCommand():
-		doPluginTest(*pluginTestName)
+		doPluginTestAction(*pluginTestName, *pluginTestAction)
+	case printDefault.FullCommand():
+		fmt.Printf("%s", string(defaultJson()))
 	}
 }
