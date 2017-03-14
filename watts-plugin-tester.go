@@ -8,6 +8,8 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	v "github.com/gima/govalid/v1"
+	"io/ioutil"
+	"github.com/imdario/mergo"
 )
 
 type UserInfo struct {
@@ -31,14 +33,14 @@ type PluginInput struct {
 
 
 var (
-	app = kingpin.New("watts-plugin-tester", "usage message")
+	app = kingpin.New("watts-plugin-tester", "Test tool for watts plugins")
 	pluginTestAction = app.Flag("plugin-action", "The plugin action to be tested. Defaults to \"parameter\"").Default("parameter").Short('a').String()
 
-	pluginTest = app.Command("test", "test a plugin")
+	pluginTest = app.Command("test", "Test a plugin")
 	pluginTestName = pluginTest.Arg("pluginName", "Name of the plugin to test").Required().String()
 	pluginInputOverride = pluginTest.Flag("json", "Use user provided json to override the inbuilt one").Short('j').String()
 
-	printDefault = app.Command("default", "print the default plugin input as json")
+	printDefault = app.Command("default", "Print the default plugin input as json")
 
 	userId = "max_mustermann"
 	defaultPluginInput = PluginInput{
@@ -55,8 +57,6 @@ var (
 			Sub: "123456789",
 		},
 	}
-
-	pluginInput PluginInput
 
 	schemes =  map[string]v.Validator{
 		"parameter": v.Object(
@@ -86,8 +86,6 @@ var (
 
 func defaultJson() (inputJson []byte) {
 	pluginInput := defaultPluginInput
-
-
 	pluginInput.Action = *pluginTestAction
 	pluginInput.WattsUserid = base64.StdEncoding.EncodeToString([]byte(userId))
 
@@ -95,19 +93,37 @@ func defaultJson() (inputJson []byte) {
 	return
 }
 
+func pluginInputJson() (inputJson []byte) {
+	inputJson = defaultJson()
 
-func doPluginTestAction(pluginName string, actionName string) (result string) {
-	fmt.Println("testing ", pluginName, "->", actionName)
+	if *pluginInputOverride != "" {
+		inputOverride, err := ioutil.ReadFile(*pluginInputOverride)
+		if err !=  nil {
+			fmt.Println("Error reading file ", *pluginInputOverride, " (", err, ")")
+			return
+		}
 
-	pluginInput = defaultPluginInput
+		var overrideJson PluginInput
+		errr := json.Unmarshal(inputOverride, &overrideJson)
+		if errr != nil {
+			return
+		}
 
+		pluginInput := defaultPluginInput
+		pluginInput.Action = *pluginTestAction
+		pluginInput.WattsUserid = base64.StdEncoding.EncodeToString([]byte(userId))
 
-	pluginInput.Action = actionName
-	pluginInput.WattsUserid = base64.StdEncoding.EncodeToString([]byte(userId))
+		mergo.Merge(&overrideJson, pluginInput)
 
-	inputJson, _ := json.Marshal(pluginInput)
+		inputJson, _ = json.Marshal(overrideJson)
+	}
+	return
+}
 
-	inputBase64 := base64.StdEncoding.EncodeToString([]byte(inputJson))
+func doPluginTestAction(pluginName string) (result string) {
+	fmt.Println("testing ", pluginName, "->", *pluginTestAction)
+
+	inputBase64 := base64.StdEncoding.EncodeToString(pluginInputJson())
 
 	out, err := exec.Command(pluginName, inputBase64).Output()
 	if err != nil {
@@ -116,12 +132,12 @@ func doPluginTestAction(pluginName string, actionName string) (result string) {
 		return
 	}
 
-	fmt.Println("Output: ", string(out))
+	fmt.Println("output: ", string(out))
 
 	var pluginOutput interface{}
 	json.Unmarshal(out, &pluginOutput)
 
-	path, errr := schemes[actionName].Validate(pluginOutput)
+	path, errr := schemes[*pluginTestAction].Validate(pluginOutput)
 	if errr == nil {
 		fmt.Println("Validation passed")
 	} else {
@@ -134,7 +150,7 @@ func doPluginTestAction(pluginName string, actionName string) (result string) {
 func main() {
 	switch kingpin.MustParse(app.Parse(os.Args[1:])) {
 	case pluginTest.FullCommand():
-		doPluginTestAction(*pluginTestName, *pluginTestAction)
+		doPluginTestAction(*pluginTestName)
 	case printDefault.FullCommand():
 		fmt.Printf("%s", string(defaultJson()))
 	}
