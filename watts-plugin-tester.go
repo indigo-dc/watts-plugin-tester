@@ -36,6 +36,7 @@ var (
 	app = kingpin.New("watts-plugin-tester", "Test tool for watts plugins")
 	pluginTestAction = app.Flag("plugin-action", "The plugin action to be tested. Defaults to \"parameter\"").Default("parameter").Short('a').String()
 	pluginInputOverride = app.Flag("json", "Use user provided json to override the inbuilt one").Short('j').String()
+	verbose = app.Flag("verbose", "Be verbose").Short('v').Bool()
 
 	pluginTest = app.Command("test", "Test a plugin")
 	pluginTestName = pluginTest.Arg("pluginName", "Name of the plugin to test").Required().String()
@@ -131,7 +132,10 @@ func doPluginTestAction(pluginName string) {
 		return
 	}
 
-	fmt.Println("output: ", string(out))
+	if *verbose {
+		fmt.Println("output: ", string(out))
+	}
+
 
 	var pluginOutput interface{}
 	json.Unmarshal(out, &pluginOutput)
