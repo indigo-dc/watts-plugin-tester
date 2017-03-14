@@ -40,7 +40,6 @@ var (
 	userId = "max_mustermann"
 	pluginInput = PluginInput{
 		WattsVersion: "1.0",
-		//Action: actionName,
 		ConfParams: "{}",
 		Params: "{}",
 		CredState: "undefined",
@@ -86,14 +85,9 @@ func validateAction(action string, pluginOutput interface{}) {
 func doPluginTest(pluginName string) {
 	fmt.Println("testing plugin ", pluginName)
 
-	path, err := exec.LookPath(pluginName)
-	if err != nil {
-		fmt.Println("can not find plugin in path")
-	} else {
-		fmt.Println("plugin located at ", path)
+	for _, action := range actions {
+		doPluginTestAction(pluginName, action)
 	}
-
-	doPluginTestAction(pluginName, "parameter")
 }
 
 func doPluginTestAction(pluginName string, actionName string) (result string) {
@@ -104,8 +98,6 @@ func doPluginTestAction(pluginName string, actionName string) (result string) {
 
 	inputJson, _ := json.Marshal(pluginInput)
 	inputBase64 := base64.StdEncoding.EncodeToString([]byte(inputJson))
-
-	//fmt.Println(inputBase64)
 
 	out, err := exec.Command(pluginName, inputBase64).Output()
 	if err != nil {
