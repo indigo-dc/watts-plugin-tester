@@ -31,12 +31,14 @@ type PluginInput struct {
 	WattsUserid string `json:"watts_userid"`
 }
 
+type Output struct{m map[string]string}
 
 var (
 	app = kingpin.New("watts-plugin-tester", "Test tool for watts plugins")
 	pluginTestAction = app.Flag("plugin-action", "The plugin action to be tested. Defaults to \"parameter\"").Default("parameter").Short('a').String()
 	pluginInputOverride = app.Flag("json", "Use user provided json to override the inbuilt one").Short('j').String()
-	verbose = app.Flag("verbose", "Be verbose").Short('v').Bool()
+	//verbose = app.Flag("verbose", "Be verbose").Short('v').Bool()
+	machineReadable = app.Flag("machine", "Be machine readable (all output will be json)").Short('m').Bool()
 
 	pluginTest = app.Command("test", "Test a plugin")
 	pluginTestName = pluginTest.Arg("pluginName", "Name of the plugin to test").Required().String()
@@ -139,42 +141,66 @@ func specificJson() (inputJson []byte) {
 	return
 }
 
-func doPluginTestAction(pluginName string) {
-	fmt.Println("testing ", pluginName, "->", *pluginTestAction)
+func doPluginTest(pluginName string) (output Output) {
+	output.m = map[string]string{}
+
+	output.print("plugin_name", pluginName)
+	output.print("action", *pluginTestAction)
 
 	inputBase64 := base64.StdEncoding.EncodeToString(specificJson())
 
 	out, err := exec.Command(pluginName, inputBase64).Output()
 	if err != nil {
-		fmt.Println("Error executing command: ", err)
+		output.print("result", "error")
+		output.print("description", "error executing the plugin")
 		return
 	}
 
-	if *verbose {
-		fmt.Println("output: ", string(out))
-	}
-
+	output.print("plugin_output", string(out))
 
 	var pluginOutput interface{}
 	json.Unmarshal(out, &pluginOutput)
 
 	path, errr := schemes[*pluginTestAction].Validate(pluginOutput)
-	if errr == nil {
-		fmt.Println("Validation passed")
-	} else {
-		fmt.Printf("Validation error at %s. Error (%s)", path, errr)
+	if errr != nil {
+		output.print("result", "error")
+		output.print("description", fmt.Sprintf("Validation error at %s. Error (%s)", path, errr))
+		return
 	}
 
+	output.print("result", "ok")
+	output.print("description", "validation passed")
 	return
 }
 
+func (o *Output) print(identifier string, output string) {
+	o.m[identifier] = output
+
+	if !*machineReadable {
+		fmt.Printf("%15s: %s\n", identifier, output)
+	}
+}
+
+func printMachineReadable(o Output) (bs []byte) {
+	if *machineReadable {
+		bs, _ = json.MarshalIndent(o.m, "", "    ")
+	}
+	return
+}
+
+
 func main() {
+	var output []byte
+
 	switch kingpin.MustParse(app.Parse(os.Args[1:])) {
 	case pluginTest.FullCommand():
-		doPluginTestAction(*pluginTestName)
+		o := doPluginTest(*pluginTestName)
+		output = printMachineReadable(o)
 	case printDefault.FullCommand():
-		fmt.Printf("%s", string(defaultJson()))
+		output = defaultJson()
 	case printSpecific.FullCommand():
-		fmt.Printf("%s", string(specificJson()))
+		output = specificJson()
 	}
+
+	fmt.Printf("%s", string(output))
 }
