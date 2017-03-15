@@ -118,6 +118,16 @@ var (
 				v.ObjKV("log_msg", v.String()),
 			),
 		),
+		"revoke": v.Or(
+			v.Object(
+				v.ObjKV("result", v.String(v.StrIs("ok"))),
+			),
+			v.Object(
+				v.ObjKV("result", v.String(v.StrIs("error"))),
+				v.ObjKV("user_msg", v.String()),
+				v.ObjKV("log_msg", v.String()),
+			),
+		),
 	}
 )
 
