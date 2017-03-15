@@ -186,10 +186,16 @@ func doPluginTest(pluginName string) (output Output) {
 		return
 	}
 
-	output.O = json.RawMessage(out)
 
 	var pluginOutput interface{}
 	json.Unmarshal(out, &pluginOutput)
+
+
+	output.O = json.RawMessage(out)
+	if !*machineReadable {
+		b, _ := json.MarshalIndent(&pluginOutput, "", "    ")
+		fmt.Printf("%15s:\n%s\n", "output", string(b))
+	}
 
 	path, errr := schemes[*pluginTestAction].Validate(pluginOutput)
 	if errr != nil {
