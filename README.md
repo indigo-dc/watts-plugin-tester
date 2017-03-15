@@ -4,7 +4,7 @@ watts-plugin-tester
 
 build
 ----
-go build
+go get && go build
 
 
 usage
