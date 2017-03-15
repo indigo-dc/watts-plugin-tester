@@ -83,6 +83,24 @@ var (
 			))),
 			v.ObjKV("version", v.String()),
 		),
+		"request": v.Or(
+			v.Object(
+				v.ObjKV("result", v.String(v.StrIs("ok"))),
+				v.ObjKV("credential", v.Array(v.ArrEach(
+					v.Object(
+						v.ObjKV("name", v.String()),
+						v.ObjKV("type", v.String()),
+						v.ObjKV("value", v.String()),
+					),
+				))),
+				v.ObjKV("state", v.String()),
+			),
+			v.Object(
+				v.ObjKV("result", v.String(v.StrIs("error"))),
+				v.ObjKV("user_msg", v.String()),
+				v.ObjKV("log_msg", v.String()),
+			),
+		),
 	}
 )
 
