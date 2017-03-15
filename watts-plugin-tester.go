@@ -31,6 +31,11 @@ type PluginInput struct {
 	WattsUserid string `json:"watts_userid"`
 }
 
+type User struct {
+	Issuer  string `json:"issuer"`
+	Subject string `json:"subject"`
+}
+
 type Output struct{m map[string]string}
 
 var (
@@ -46,20 +51,24 @@ var (
 	printDefault = app.Command("default", "Print the default plugin input as json")
 	printSpecific = app.Command("specific", "Print the plugin input (including the user override) as json")
 
-	userId = "max_mustermann"
+	defaultUser = User{
+		Issuer: "https://issuer.example.com",
+		Subject: "123456789",
+	}
+	defaultUserInfo = UserInfo{
+		FamilyName: "Mustermann",
+		Gender: "Male",
+		GivenName: "Max",
+		ISS: defaultUser.Issuer,
+		Name: "Max Mustermann",
+		Sub: defaultUser.Subject,
+	}
 	defaultPluginInputTemplate = PluginInput{
 		WattsVersion: "1.0",
 		ConfParams: "{}",
 		Params: "{}",
 		CredState: "undefined",
-		UserInformation: UserInfo{
-			FamilyName: "Mustermann",
-			Gender: "Male",
-			GivenName: "Max",
-			ISS: "https://issuer.example.com",
-			Name: "Max Mustermann",
-			Sub: "123456789",
-		},
+		UserInformation: defaultUserInfo ,
 	}
 
 	schemes =  map[string]v.Validator{
@@ -106,24 +115,28 @@ var (
 	}
 )
 
+func generateUserID() (uid string) {
+	j, _ := json.Marshal(defaultUser)
+	uid = base64.RawStdEncoding.EncodeToString([]byte(j))
+	return
+}
+
 func defaultPluginInput() (pluginInput PluginInput) {
 	pluginInput = defaultPluginInputTemplate
 	pluginInput.Action = *pluginTestAction
-	pluginInput.WattsUserid = base64.StdEncoding.EncodeToString([]byte(userId))
 	return
 }
 
-func defaultJson() (s []byte) {
-	s, _ = json.MarshalIndent(defaultPluginInput(), "", "    ")
+func defaultJson(p PluginInput) (s []byte) {
+	s, _ = json.MarshalIndent(p, "", "    ")
 	return
 }
 
-func specificJson() (inputJson []byte) {
-	inputJson = defaultJson()
-
+func specificJson(p PluginInput) (bs []byte) {
 	if *pluginInputOverride != "" {
 		inputOverride, err := ioutil.ReadFile(*pluginInputOverride)
 		if err !=  nil {
+			// TODO machine readability
 			fmt.Println("Error reading file ", *pluginInputOverride, " (", err, ")")
 			return
 		}
@@ -134,9 +147,11 @@ func specificJson() (inputJson []byte) {
 			return
 		}
 
-		mergo.Merge(&overrideJson, defaultJson())
+		mergo.Merge(&overrideJson, defaultJson(p))
 
-		inputJson, _ = json.MarshalIndent(overrideJson, "", "    ")
+		bs, _ = json.MarshalIndent(overrideJson, "", "    ")
+	} else {
+		bs = defaultJson(p)
 	}
 	return
 }
@@ -147,7 +162,9 @@ func doPluginTest(pluginName string) (output Output) {
 	output.print("plugin_name", pluginName)
 	output.print("action", *pluginTestAction)
 
-	inputBase64 := base64.StdEncoding.EncodeToString(specificJson())
+	pi := defaultPluginInput()
+	pi.WattsUserid = generateUserID()
+	inputBase64 := base64.StdEncoding.EncodeToString(specificJson(pi))
 
 	out, err := exec.Command(pluginName, inputBase64).Output()
 	if err != nil {
@@ -197,9 +214,9 @@ func main() {
 		o := doPluginTest(*pluginTestName)
 		output = printMachineReadable(o)
 	case printDefault.FullCommand():
-		output = defaultJson()
+		output = defaultJson(defaultPluginInput())
 	case printSpecific.FullCommand():
-		output = specificJson()
+		output = specificJson(defaultPluginInput())
 	}
 
 	fmt.Printf("%s", string(output))
