@@ -10,6 +10,7 @@ import (
 	v "github.com/gima/govalid/v1"
 	"io/ioutil"
 	"github.com/imdario/mergo"
+	"github.com/kalaspuffar/base64url"
 )
 
 type UserInfo struct {
@@ -117,7 +118,7 @@ func (p *PluginInput) generateUserID() {
 		"subject": p.UserInformation.Sub,
 	}
 	j, _ := json.Marshal(userIdJson)
-	p.WattsUserid= base64.RawStdEncoding.EncodeToString([]byte(j))
+	p.WattsUserid= base64url.Encode(j)
 	return
 }
 
