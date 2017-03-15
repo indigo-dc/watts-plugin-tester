@@ -51,19 +51,15 @@ var (
 	printDefault = app.Command("default", "Print the default plugin input as json")
 	printSpecific = app.Command("specific", "Print the plugin input (including the user override) as json")
 
-	defaultUser = User{
-		Issuer: "https://issuer.example.com",
-		Subject: "123456789",
-	}
 	defaultUserInfo = UserInfo{
 		FamilyName: "Mustermann",
 		Gender: "Male",
 		GivenName: "Max",
-		ISS: defaultUser.Issuer,
+		ISS: "https://issuer.example.com",
 		Name: "Max Mustermann",
-		Sub: defaultUser.Subject,
+		Sub: "123456789",
 	}
-	defaultPluginInputTemplate = PluginInput{
+	defaultPluginInput = PluginInput{
 		WattsVersion: "1.0",
 		ConfParams: "{}",
 		Params: "{}",
@@ -115,24 +111,22 @@ var (
 	}
 )
 
-func generateUserID() (uid string) {
-	j, _ := json.Marshal(defaultUser)
-	uid = base64.RawStdEncoding.EncodeToString([]byte(j))
+func (p *PluginInput) generateUserID() {
+	userIdJson := map[string]string{
+		"issuer": p.UserInformation.ISS,
+		"subject": p.UserInformation.Sub,
+	}
+	j, _ := json.Marshal(userIdJson)
+	p.WattsUserid= base64.RawStdEncoding.EncodeToString([]byte(j))
 	return
 }
 
-func defaultPluginInput() (pluginInput PluginInput) {
-	pluginInput = defaultPluginInputTemplate
-	pluginInput.Action = *pluginTestAction
-	return
-}
-
-func defaultJson(p PluginInput) (s []byte) {
+func marshalPluginInput(p PluginInput) (s []byte) {
 	s, _ = json.MarshalIndent(p, "", "    ")
 	return
 }
 
-func specificJson(p PluginInput) (bs []byte) {
+func specificJson(p PluginInput) (pi PluginInput) {
 	if *pluginInputOverride != "" {
 		inputOverride, err := ioutil.ReadFile(*pluginInputOverride)
 		if err !=  nil {
@@ -141,18 +135,17 @@ func specificJson(p PluginInput) (bs []byte) {
 			return
 		}
 
-		var overrideJson PluginInput
-		errr := json.Unmarshal(inputOverride, &overrideJson)
+		errr := json.Unmarshal(inputOverride, &pi)
 		if errr != nil {
 			return
 		}
 
-		mergo.Merge(&overrideJson, defaultJson(p))
-
-		bs, _ = json.MarshalIndent(overrideJson, "", "    ")
+		mergo.Merge(&pi, p)
 	} else {
-		bs = defaultJson(p)
+		pi  = p
 	}
+
+	pi.generateUserID()
 	return
 }
 
@@ -162,9 +155,9 @@ func doPluginTest(pluginName string) (output Output) {
 	output.print("plugin_name", pluginName)
 	output.print("action", *pluginTestAction)
 
-	pi := defaultPluginInput()
-	pi.WattsUserid = generateUserID()
-	inputBase64 := base64.StdEncoding.EncodeToString(specificJson(pi))
+	pi := specificJson(defaultPluginInput)
+	pi.Action = *pluginTestAction
+	inputBase64 := base64.StdEncoding.EncodeToString(marshalPluginInput(pi))
 
 	out, err := exec.Command(pluginName, inputBase64).Output()
 	if err != nil {
@@ -214,9 +207,9 @@ func main() {
 		o := doPluginTest(*pluginTestName)
 		output = printMachineReadable(o)
 	case printDefault.FullCommand():
-		output = defaultJson(defaultPluginInput())
+		output = marshalPluginInput(defaultPluginInput)
 	case printSpecific.FullCommand():
-		output = specificJson(defaultPluginInput())
+		output = marshalPluginInput(specificJson(defaultPluginInput))
 	}
 
 	fmt.Printf("%s", string(output))
