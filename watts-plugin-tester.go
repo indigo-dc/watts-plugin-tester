@@ -114,7 +114,7 @@ func defaultPluginInput() (pluginInput PluginInput) {
 }
 
 func defaultJson() (s []byte) {
-	s, _ = json.Marshal(defaultPluginInput())
+	s, _ = json.MarshalIndent(defaultPluginInput(), "", "    ")
 	return
 }
 
@@ -136,7 +136,7 @@ func specificJson() (inputJson []byte) {
 
 		mergo.Merge(&overrideJson, defaultJson())
 
-		inputJson, _ = json.Marshal(overrideJson)
+		inputJson, _ = json.MarshalIndent(overrideJson, "", "    ")
 	}
 	return
 }
