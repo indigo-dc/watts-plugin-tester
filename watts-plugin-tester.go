@@ -42,6 +42,12 @@ type Output struct{
 	O json.RawMessage `json:"output"`
 }
 
+type ErrorOutput struct{
+	Meta map[string]string `json:"meta"`
+	ErrorString string `json:"error"`
+	InvalidOutput string `json:"invalid_output"`
+}
+
 var (
 	app = kingpin.New("watts-plugin-tester", "Test tool for watts plugins")
 	pluginTestAction = app.Flag("plugin-action", "The plugin action to be tested. Defaults to \"parameter\"").Default("parameter").Short('a').String()
@@ -195,26 +201,40 @@ func (o *Output) print(identifier string, output string) {
 	}
 }
 
-func generateMachineReadable(o Output) (bs []byte) {
+func printOutput(o Output) {
 	if *machineReadable {
-		bs, _ = json.MarshalIndent(&o, "", "    ")
+		bs, err := json.MarshalIndent(&o, "", "    ")
+		if err != nil {
+			var eo ErrorOutput
+			eo.Meta = o.M
+			eo.InvalidOutput = string(o.O)
+			eo.ErrorString = fmt.Sprintf("%s", err)
+
+			bss, errr := json.MarshalIndent(&eo, "", "    ")
+			if errr == nil {
+				fmt.Printf("%s", string(bss))
+			} else {
+				fmt.Println("watts-plugin-tester: ERROR")
+			}
+
+		} else {
+			fmt.Printf("%s", string(bs))
+		}
 	}
 	return
 }
 
 
 func main() {
-	var output []byte
-
 	switch kingpin.MustParse(app.Parse(os.Args[1:])) {
 	case pluginTest.FullCommand():
 		o := doPluginTest(*pluginTestName)
-		output = generateMachineReadable(o)
+		printOutput(o)
 	case printDefault.FullCommand():
-		output = marshalPluginInput(defaultPluginInput)
+		dpi := marshalPluginInput(defaultPluginInput)
+		fmt.Printf("%s", string(dpi))
 	case printSpecific.FullCommand():
-		output = marshalPluginInput(specificJson(defaultPluginInput))
+		spi := marshalPluginInput(specificJson(defaultPluginInput))
+		fmt.Printf("%s", string(spi))
 	}
-
-	fmt.Printf("%s", string(output))
 }
