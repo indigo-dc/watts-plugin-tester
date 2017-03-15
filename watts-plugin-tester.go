@@ -11,6 +11,7 @@ import (
 	"io/ioutil"
 	"github.com/imdario/mergo"
 	"github.com/kalaspuffar/base64url"
+	"bytes"
 )
 
 type UserInfo struct {
@@ -143,6 +144,8 @@ func (p *PluginInput) generateUserID() {
 
 func marshalPluginInput(p PluginInput) (s []byte) {
 	s, _ = json.MarshalIndent(p, "", "    ")
+	s = bytes.Replace(s, []byte{'/'}, []byte{'\\','/'}, -1)
+
 	return
 }
 
