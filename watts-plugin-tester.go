@@ -37,7 +37,10 @@ type User struct {
 	Subject string `json:"subject"`
 }
 
-type Output struct{m map[string]string}
+type Output struct{
+	M map[string]string `json:"meta"`
+	O json.RawMessage `json:"output"`
+}
 
 var (
 	app = kingpin.New("watts-plugin-tester", "Test tool for watts plugins")
@@ -151,7 +154,7 @@ func specificJson(p PluginInput) (pi PluginInput) {
 }
 
 func doPluginTest(pluginName string) (output Output) {
-	output.m = map[string]string{}
+	output.M = map[string]string{}
 
 	output.print("plugin_name", pluginName)
 	output.print("action", *pluginTestAction)
@@ -160,14 +163,14 @@ func doPluginTest(pluginName string) (output Output) {
 	pi.Action = *pluginTestAction
 	inputBase64 := base64.StdEncoding.EncodeToString(marshalPluginInput(pi))
 
-	out, err := exec.Command(pluginName, inputBase64).Output()
+	out, err := exec.Command(pluginName, inputBase64).CombinedOutput()
 	if err != nil {
 		output.print("result", "error")
 		output.print("description", "error executing the plugin")
 		return
 	}
 
-	output.print("plugin_output", string(out))
+	output.O = json.RawMessage(out)
 
 	var pluginOutput interface{}
 	json.Unmarshal(out, &pluginOutput)
@@ -185,16 +188,16 @@ func doPluginTest(pluginName string) (output Output) {
 }
 
 func (o *Output) print(identifier string, output string) {
-	o.m[identifier] = output
+	o.M[identifier] = output
 
 	if !*machineReadable {
 		fmt.Printf("%15s: %s\n", identifier, output)
 	}
 }
 
-func printMachineReadable(o Output) (bs []byte) {
+func generateMachineReadable(o Output) (bs []byte) {
 	if *machineReadable {
-		bs, _ = json.MarshalIndent(o.m, "", "    ")
+		bs, _ = json.MarshalIndent(&o, "", "    ")
 	}
 	return
 }
@@ -206,7 +209,7 @@ func main() {
 	switch kingpin.MustParse(app.Parse(os.Args[1:])) {
 	case pluginTest.FullCommand():
 		o := doPluginTest(*pluginTestName)
-		output = printMachineReadable(o)
+		output = generateMachineReadable(o)
 	case printDefault.FullCommand():
 		output = marshalPluginInput(defaultPluginInput)
 	case printSpecific.FullCommand():
