@@ -14,6 +14,7 @@ import (
 	"os/exec"
 )
 
+/*
 type PluginInput struct {
 	WattsVersion    string           `json:"watts_version"`
 	Action          string           `json:"action"`
@@ -23,6 +24,9 @@ type PluginInput struct {
 	UserInformation *json.RawMessage `json:"user_info"`
 	WattsUserid     string           `json:"watts_userid"`
 }
+*/
+
+type PluginInput map[string](*json.RawMessage)
 
 type User struct {
 	Issuer  string `json:"issuer"`
@@ -56,6 +60,8 @@ var (
 	printDefault  = app.Command("default", "Print the default plugin input as json")
 	printSpecific = app.Command("specific", "Print the plugin input (including the user override) as json")
 
+	defaultWattsVersion =  json.RawMessage(`"1.0.0"`)
+	defaultCredentialState = json.RawMessage(`"undefined"`)
 	defaultConfParams = json.RawMessage(`{}`)
 	defaultParams     = json.RawMessage(`{}`)
 	defaultUserInfo   = json.RawMessage(`{
@@ -63,6 +69,18 @@ var (
 		"sub": "123456789"
 	}`)
 
+	defaultAction json.RawMessage
+	defaultWattsUserId json.RawMessage
+
+	defaultPluginInput = PluginInput{
+		"watts_version": &defaultWattsVersion,
+		"cred_state": &defaultCredentialState,
+		"conf_params": &defaultConfParams,
+		"params": &defaultParams,
+		"user_info": &defaultUserInfo,
+	}
+
+	/*
 	defaultPluginInput = PluginInput{
 		WattsVersion:    "1.0.0",
 		ConfParams:      &defaultConfParams,
@@ -70,6 +88,7 @@ var (
 		UserInformation: &defaultUserInfo,
 		CredState:       "undefined",
 	}
+	*/
 
 	pluginInputScheme = v.Object(
 		v.ObjKV("watts_version", v.String()),
@@ -166,12 +185,13 @@ func (p *PluginInput) generateUserID() {
 	}
 	j, _ := json.Marshal(userIdJson)
 	escaped := bytes.Replace(j, []byte{'/'}, []byte{'\\', '/'}, -1)
-	p.WattsUserid = base64url.Encode(escaped)
+	defaultWattsUserId = json.RawMessage(base64url.Encode(escaped))
+	(*p)["watts_userid"] = &defaultWattsUserId
 	return
 }
 
 func marshalPluginInput(p PluginInput) (s []byte) {
-	s, _ = json.MarshalIndent(p, "", "    ")
+	s, _ = json.MarshalIndent(&p, "", "    ")
 	return
 }
 
@@ -206,7 +226,8 @@ func doPluginTest(pluginName string) (output Output) {
 	output.print("action", *pluginTestAction)
 
 	pi := specificJson(defaultPluginInput)
-	pi.Action = *pluginTestAction
+	defaultAction = json.RawMessage(*pluginTestAction)
+	pi["action"] = &defaultAction
 	inputBase64 := base64.StdEncoding.EncodeToString(marshalPluginInput(pi))
 
 	out, err := exec.Command(pluginName, inputBase64).CombinedOutput()
