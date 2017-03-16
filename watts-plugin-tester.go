@@ -138,10 +138,31 @@ var (
 	}
 )
 
+func (p *PluginInput) validate() {
+	var bs []byte
+	var i interface{}
+
+	bs, _ =  json.Marshal(*p)
+	json.Unmarshal(bs, &i)
+	path, err := pluginInputScheme.Validate(i)
+	
+	if err != nil {
+		fmt.Printf("Validation error at %s. Error (%s)\n%s", path, err, bs)
+		os.Exit(1)
+	}
+
+
+	return
+}
+
 func (p *PluginInput) generateUserID() {
 	userIdJson := map[string]string{
+		/*
 		"issuer":  p.UserInformation.ISS,
 		"subject": p.UserInformation.Sub,
+		*/
+		"issuer":  "foo issuer",
+		"subject": "foo subject",
 	}
 	j, _ := json.Marshal(userIdJson)
 	escaped := bytes.Replace(j, []byte{'/'}, []byte{'\\', '/'}, -1)
@@ -174,6 +195,7 @@ func specificJson(p PluginInput) (pi PluginInput) {
 	}
 
 	pi.generateUserID()
+	pi.validate()
 	return
 }
 
