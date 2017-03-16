@@ -65,7 +65,7 @@ var (
 	defaultPluginInput = PluginInput{
 		"watts_version": &defaultWattsVersion,
 		"cred_state":    &defaultCredentialState,
-		//"conf_params":   &defaultConfParams,
+		"conf_params":   &defaultConfParams,
 		"params":        &defaultParams,
 		"user_info":     &defaultUserInfo,
 	}
@@ -168,15 +168,26 @@ func (p *PluginInput) validate() {
 }
 
 func (p *PluginInput) generateUserID() {
-	userIdJson := map[string]string{
-		/*
-			"issuer":  p.UserInformation.ISS,
-			"subject": p.UserInformation.Sub,
-		*/
-		"issuer":  "foo issuer",
-		"subject": "foo subject",
+	userIdJson := map[string]string{}
+	userIdJsonReduced := map[string]string{}
+
+	userInfo := *(*p)["user_info"]
+	//fmt.Printf("user_info: %s\n", userInfo)
+
+	err := json.Unmarshal(userInfo, &userIdJson)
+	//fmt.Printf("uid:%s\n", userIdJson)
+
+	userIdJsonReduced["iss"] = userIdJson["iss"]
+	userIdJsonReduced["sub"] = userIdJson["sub"]
+
+	if err != nil {
+		fmt.Printf("error generating watts_userid\n")
+		os.Exit(1)
 	}
-	j, _ := json.Marshal(userIdJson)
+
+
+	j, err := json.Marshal(userIdJsonReduced)
+	//fmt.Printf("reduced uid:%s\n", j)
 	escaped := bytes.Replace(j, []byte{'/'}, []byte{'\\', '/'}, -1)
 	st := fmt.Sprintf("\"%s\"", base64url.Encode(escaped))
 	defaultWattsUserId = json.RawMessage(st)
@@ -327,12 +338,11 @@ func main() {
 		printOutput(o)
 
 	case printDefault.FullCommand():
-		defaultPluginInput.validate()
 		fmt.Printf("%s", defaultPluginInput.marshalPluginInput())
 
 	case printSpecific.FullCommand():
-		defaultPluginInput.validate()
 		defaultPluginInput.specifyPluginInput(*pluginInputOverride)
+		defaultPluginInput.generateUserID()
 		fmt.Printf("%s", defaultPluginInput.marshalPluginInput())
 
 	case printVersion.FullCommand():
