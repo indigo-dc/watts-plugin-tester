@@ -14,23 +14,14 @@ import (
 	"os/exec"
 )
 
-type UserInfo struct {
-	FamilyName string `json:"family_name"`
-	Gender     string `json:"gender"`
-	GivenName  string `json:"given_name"`
-	ISS        string `json:"iss"`
-	Name       string `json:"name"`
-	Sub        string `json:"sub"`
-}
-
 type PluginInput struct {
-	WattsVersion    string          `json:"watts_version"`
-	Action          string          `json:"action"`
+	WattsVersion    string           `json:"watts_version"`
+	Action          string           `json:"action"`
 	ConfParams      *json.RawMessage `json:"conf_params"`
 	Params          *json.RawMessage `json:"params"`
-	CredState       string          `json:"cred_state"`
-	UserInformation UserInfo        `json:"user_info"`
-	WattsUserid     string          `json:"watts_userid"`
+	CredState       string           `json:"cred_state"`
+	UserInformation *json.RawMessage `json:"user_info"`
+	WattsUserid     string           `json:"watts_userid"`
 }
 
 type User struct {
@@ -65,23 +56,33 @@ var (
 	printDefault  = app.Command("default", "Print the default plugin input as json")
 	printSpecific = app.Command("specific", "Print the plugin input (including the user override) as json")
 
-	defaultUserInfo = UserInfo{
-		FamilyName: "Mustermann",
-		Gender:     "Male",
-		GivenName:  "Max",
-		ISS:        "https://issuer.example.com",
-		Name:       "Max Mustermann",
-		Sub:        "123456789",
-	}
-	defaultConfParams = json.RawMessage("{}")
-	defaultParams = json.RawMessage("{}")
+	defaultConfParams = json.RawMessage(`{}`)
+	defaultParams     = json.RawMessage(`{}`)
+	defaultUserInfo   = json.RawMessage(`{
+		"iss": "https://issuer.example.com",
+		"sub": "123456789"
+	}`)
+
 	defaultPluginInput = PluginInput{
 		WattsVersion:    "1.0.0",
 		ConfParams:      &defaultConfParams,
 		Params:          &defaultParams,
+		UserInformation: &defaultUserInfo,
 		CredState:       "undefined",
-		UserInformation: defaultUserInfo,
 	}
+
+	pluginInputScheme = v.Object(
+		v.ObjKV("watts_version", v.String()),
+		v.ObjKV("cred_state", v.String()),
+		v.ObjKV("conf_params", v.Object()),
+		v.ObjKV("params", v.Object()),
+		v.ObjKV("user_info",
+			v.Object(
+				v.ObjKV("iss", v.String()),
+				v.ObjKV("sub", v.String()),
+			),
+		),
+	)
 
 	schemes = map[string]v.Validator{
 		"parameter": v.Object(
