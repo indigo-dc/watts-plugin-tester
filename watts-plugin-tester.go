@@ -197,8 +197,8 @@ func (p *PluginInput) marshalPluginInput() (s []byte) {
 	return
 }
 
-func (pi *PluginInput) specifyPluginInput(path string) {
-	pi = &defaultPluginInput
+func (p *PluginInput) specifyPluginInput(path string) {
+	p = &defaultPluginInput
 
 	if path == "" {
 		return
@@ -219,12 +219,12 @@ func (pi *PluginInput) specifyPluginInput(path string) {
 
 	/*
 	o, _ := json.MarshalIndent(overridePluginInput, "", "  ")
-	p, _ := json.MarshalIndent(pi, "", "  ")
+	p, _ := json.MarshalIndent(p, "", "  ")
 	fmt.Printf("---merging\n%s\n---and\n%s\n", o, p)
 	*/
 
 	// merge the defaultPluginInput with the 
-	err = mergo.Merge(&overridePluginInput, pi)
+	err = mergo.Merge(&overridePluginInput, p)
 	if err != nil {
 		fmt.Println("Error merging: (", err, ")")
 		os.Exit(1)
@@ -235,7 +235,7 @@ func (pi *PluginInput) specifyPluginInput(path string) {
 	fmt.Printf("---===\n%s\n", o)
 	*/
 
-	*pi = overridePluginInput
+	*p = overridePluginInput
 	return
 }
 
