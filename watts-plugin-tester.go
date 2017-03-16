@@ -24,13 +24,13 @@ type UserInfo struct {
 }
 
 type PluginInput struct {
-	WattsVersion    string   `json:"watts_version"`
-	Action          string   `json:"action"`
-	ConfParams      string   `json:"conf_params"`
-	Params          string   `json:"params"`
-	CredState       string   `json:"cred_state"`
-	UserInformation UserInfo `json:"user_info"`
-	WattsUserid     string   `json:"watts_userid"`
+	WattsVersion    string          `json:"watts_version"`
+	Action          string          `json:"action"`
+	ConfParams      *json.RawMessage `json:"conf_params"`
+	Params          *json.RawMessage `json:"params"`
+	CredState       string          `json:"cred_state"`
+	UserInformation UserInfo        `json:"user_info"`
+	WattsUserid     string          `json:"watts_userid"`
 }
 
 type User struct {
@@ -73,10 +73,12 @@ var (
 		Name:       "Max Mustermann",
 		Sub:        "123456789",
 	}
+	defaultConfParams = json.RawMessage("{}")
+	defaultParams = json.RawMessage("{}")
 	defaultPluginInput = PluginInput{
 		WattsVersion:    "1.0.0",
-		ConfParams:      "{}",
-		Params:          "{}",
+		ConfParams:      &defaultConfParams,
+		Params:          &defaultParams,
 		CredState:       "undefined",
 		UserInformation: defaultUserInfo,
 	}
