@@ -75,7 +75,7 @@ var (
 		Sub: "123456789",
 	}
 	defaultPluginInput = PluginInput{
-		WattsVersion: "1.0",
+		WattsVersion: "1.0.0",
 		ConfParams: "{}",
 		Params: "{}",
 		CredState: "undefined",
