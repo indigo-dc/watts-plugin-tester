@@ -50,8 +50,11 @@ type ErrorOutput struct{
 }
 
 var (
+	version = "0.1"
+
 	app = kingpin.New("watts-plugin-tester", "Test tool for watts plugins")
 	pluginTestAction = app.Flag("plugin-action", "The plugin action to be tested. Defaults to \"parameter\"").Default("parameter").Short('a').String()
+	printVersion = app.Command("version", "Print the version information")
 	pluginInputOverride = app.Flag("json", "Use user provided json to override the inbuilt one").Short('j').String()
 	//verbose = app.Flag("verbose", "Be verbose").Short('v').Bool()
 	machineReadable = app.Flag("machine", "Be machine readable (all output will be json)").Short('m').Bool()
@@ -61,6 +64,7 @@ var (
 
 	printDefault = app.Command("default", "Print the default plugin input as json")
 	printSpecific = app.Command("specific", "Print the plugin input (including the user override) as json")
+
 
 	defaultUserInfo = UserInfo{
 		FamilyName: "Mustermann",
@@ -255,5 +259,7 @@ func main() {
 	case printSpecific.FullCommand():
 		spi := marshalPluginInput(specificJson(defaultPluginInput))
 		fmt.Printf("%s", string(spi))
+	case printVersion.FullCommand():
+		fmt.Printf("%s\n", version)
 	}
 }
