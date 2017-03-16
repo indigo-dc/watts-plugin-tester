@@ -1,0 +1,13 @@
+{
+	"conf_params": {
+		"foo": "bar"
+	},
+	"user_info": {
+		"family_name": "Wurst",
+		"gender": "Male",
+		"given_name": "Hans",
+		"iss": "https://iss.example.com",
+		"name": "Maxime Mustermann",
+		"sub": "123456789"
+	}
+}

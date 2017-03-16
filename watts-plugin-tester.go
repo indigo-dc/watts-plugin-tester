@@ -14,19 +14,9 @@ import (
 	"os/exec"
 )
 
-/*
-type PluginInput struct {
-	WattsVersion    string           `json:"watts_version"`
-	Action          string           `json:"action"`
-	ConfParams      *json.RawMessage `json:"conf_params"`
-	Params          *json.RawMessage `json:"params"`
-	CredState       string           `json:"cred_state"`
-	UserInformation *json.RawMessage `json:"user_info"`
-	WattsUserid     string           `json:"watts_userid"`
-}
-*/
 
 type PluginInput map[string](*json.RawMessage)
+type PluginInputDirect map[string](*json.RawMessage)
 
 type User struct {
 	Issuer  string `json:"issuer"`
@@ -60,38 +50,29 @@ var (
 	printDefault  = app.Command("default", "Print the default plugin input as json")
 	printSpecific = app.Command("specific", "Print the plugin input (including the user override) as json")
 
-	defaultWattsVersion =  json.RawMessage(`"1.0.0"`)
+	defaultWattsVersion    = json.RawMessage(`"1.0.0"`)
 	defaultCredentialState = json.RawMessage(`"undefined"`)
-	defaultConfParams = json.RawMessage(`{}`)
-	defaultParams     = json.RawMessage(`{}`)
-	defaultUserInfo   = json.RawMessage(`{
+	defaultConfParams      = json.RawMessage(`{}`)
+	defaultParams          = json.RawMessage(`{}`)
+	defaultUserInfo        = json.RawMessage(`{
 		"iss": "https://issuer.example.com",
 		"sub": "123456789"
 	}`)
 
-	defaultAction json.RawMessage
-	defaultWattsUserId json.RawMessage
+	defaultAction =     json.RawMessage(`"parameter"`)
+	defaultWattsUserId = json.RawMessage(``)
 
 	defaultPluginInput = PluginInput{
 		"watts_version": &defaultWattsVersion,
-		"cred_state": &defaultCredentialState,
-		"conf_params": &defaultConfParams,
-		"params": &defaultParams,
-		"user_info": &defaultUserInfo,
+		"cred_state":    &defaultCredentialState,
+		//"conf_params":   &defaultConfParams,
+		"params":        &defaultParams,
+		"user_info":     &defaultUserInfo,
 	}
-
-	/*
-	defaultPluginInput = PluginInput{
-		WattsVersion:    "1.0.0",
-		ConfParams:      &defaultConfParams,
-		Params:          &defaultParams,
-		UserInformation: &defaultUserInfo,
-		CredState:       "undefined",
-	}
-	*/
 
 	pluginInputScheme = v.Object(
 		v.ObjKV("watts_version", v.String()),
+		v.ObjKV("watts_userid", v.String()),
 		v.ObjKV("cred_state", v.String()),
 		v.ObjKV("conf_params", v.Object()),
 		v.ObjKV("params", v.Object()),
@@ -158,18 +139,30 @@ var (
 )
 
 func (p *PluginInput) validate() {
+	var er error
 	var bs []byte
 	var i interface{}
 
-	bs, _ =  json.Marshal(*p)
-	json.Unmarshal(bs, &i)
-	path, err := pluginInputScheme.Validate(i)
-	
-	if err != nil {
-		fmt.Printf("Validation error at %s. Error (%s)\n%s", path, err, bs)
+	bs, er = json.MarshalIndent(p, "", "    ")
+	if er != nil {
+		fmt.Printf("--- plugin input:\n%s\n", *p)
+		fmt.Printf("--- bytes:\n%s\n", bs)
+		fmt.Printf("---error marshaling:\n%s\n", er)
 		os.Exit(1)
 	}
 
+	json.Unmarshal(bs, &i)
+	path, err := pluginInputScheme.Validate(i)
+
+	if err != nil {
+		fmt.Printf("Unable to validate plugin input\n")
+		fmt.Printf("%s: %s\n", "Plugin Input", bs)
+		fmt.Printf("%s: %s\n", "Error", err)
+		fmt.Printf("%s: %s\n", "Path", path)
+		os.Exit(1)
+	} else {
+		fmt.Printf("Validation passed\n")
+	}
 
 	return
 }
@@ -177,59 +170,82 @@ func (p *PluginInput) validate() {
 func (p *PluginInput) generateUserID() {
 	userIdJson := map[string]string{
 		/*
-		"issuer":  p.UserInformation.ISS,
-		"subject": p.UserInformation.Sub,
+			"issuer":  p.UserInformation.ISS,
+			"subject": p.UserInformation.Sub,
 		*/
 		"issuer":  "foo issuer",
 		"subject": "foo subject",
 	}
 	j, _ := json.Marshal(userIdJson)
 	escaped := bytes.Replace(j, []byte{'/'}, []byte{'\\', '/'}, -1)
-	defaultWattsUserId = json.RawMessage(base64url.Encode(escaped))
+	st := fmt.Sprintf("\"%s\"", base64url.Encode(escaped))
+	defaultWattsUserId = json.RawMessage(st)
 	(*p)["watts_userid"] = &defaultWattsUserId
 	return
 }
 
-func marshalPluginInput(p PluginInput) (s []byte) {
-	s, _ = json.MarshalIndent(&p, "", "    ")
+func (p *PluginInput) marshalPluginInput() (s []byte) {
+	var err error
+
+	//p.validate()
+
+	s, err = json.MarshalIndent(*p, "", "    ")
+	if err != nil {
+		fmt.Printf("Unable to marshal: Error (%s)\n%s\n", err, s)
+		os.Exit(1)
+	}
 	return
 }
 
-func specificJson(p PluginInput) (pi PluginInput) {
-	if *pluginInputOverride != "" {
-		inputOverride, err := ioutil.ReadFile(*pluginInputOverride)
-		if err != nil {
-			// TODO machine readability
-			fmt.Println("Error reading file ", *pluginInputOverride, " (", err, ")")
-			return
-		}
+func (pi *PluginInput) specifyPluginInput(path string) {
+	pi = &defaultPluginInput
 
-		errr := json.Unmarshal(inputOverride, &pi)
-		if errr != nil {
-			return
-		}
-
-		mergo.Merge(&pi, p)
-	} else {
-		pi = p
+	if path == "" {
+		return
 	}
 
-	pi.generateUserID()
-	pi.validate()
+	overrideBytes, err := ioutil.ReadFile(*pluginInputOverride)
+	if err != nil {
+		fmt.Println("Error reading file ", *pluginInputOverride, " (", err, ")")
+		os.Exit(1)
+	}
+
+	overridePluginInput := PluginInput{}
+	err = json.Unmarshal(overrideBytes, &overridePluginInput)
+	if err != nil {
+		fmt.Println("Error unmarshaling: ", *pluginInputOverride, " (", err, ")")
+		os.Exit(1)
+	}
+
+	/*
+	o, _ := json.MarshalIndent(overridePluginInput, "", "  ")
+	p, _ := json.MarshalIndent(pi, "", "  ")
+	fmt.Printf("---merging\n%s\n---and\n%s\n", o, p)
+	*/
+
+	// merge the defaultPluginInput with the 
+	err = mergo.Merge(&overridePluginInput, pi)
+	if err != nil {
+		fmt.Println("Error merging: (", err, ")")
+		os.Exit(1)
+	}
+
+	/*
+	o, _ = json.MarshalIndent(overridePluginInput, "", "  ")
+	fmt.Printf("---===\n%s\n", o)
+	*/
+
+	*pi = overridePluginInput
 	return
 }
 
-func doPluginTest(pluginName string) (output Output) {
+func doPluginTest(pluginName string, pluginInputJson []byte) (output Output) {
 	output.M = map[string]string{}
 
 	output.print("plugin_name", pluginName)
 	output.print("action", *pluginTestAction)
 
-	pi := specificJson(defaultPluginInput)
-	defaultAction = json.RawMessage(*pluginTestAction)
-	pi["action"] = &defaultAction
-	inputBase64 := base64.StdEncoding.EncodeToString(marshalPluginInput(pi))
-
+	inputBase64 := base64.StdEncoding.EncodeToString(pluginInputJson)
 	out, err := exec.Command(pluginName, inputBase64).CombinedOutput()
 	if err != nil {
 		output.print("result", "error")
@@ -289,18 +305,38 @@ func printOutput(o Output) {
 	return
 }
 
+
+/*
+* all plugin input generation shall take place here
+*/
 func main() {
 	switch kingpin.MustParse(app.Parse(os.Args[1:])) {
 	case pluginTest.FullCommand():
-		o := doPluginTest(*pluginTestName)
+		defaultPluginInput.specifyPluginInput(*pluginInputOverride)
+
+		defaultAction = json.RawMessage(fmt.Sprintf("\"%s\"", *pluginTestAction))	
+		defaultPluginInput["action"] = &defaultAction
+
+		defaultPluginInput.generateUserID()
+
+		defaultPluginInput.validate()
+		pluginInputJson := defaultPluginInput.marshalPluginInput()
+		fmt.Printf("%s", pluginInputJson)
+
+		o := doPluginTest(*pluginTestName, pluginInputJson)
 		printOutput(o)
+
 	case printDefault.FullCommand():
-		dpi := marshalPluginInput(defaultPluginInput)
-		fmt.Printf("%s", string(dpi))
+		defaultPluginInput.validate()
+		fmt.Printf("%s", defaultPluginInput.marshalPluginInput())
+
 	case printSpecific.FullCommand():
-		spi := marshalPluginInput(specificJson(defaultPluginInput))
-		fmt.Printf("%s", string(spi))
+		defaultPluginInput.validate()
+		defaultPluginInput.specifyPluginInput(*pluginInputOverride)
+		fmt.Printf("%s", defaultPluginInput.marshalPluginInput())
+
 	case printVersion.FullCommand():
 		fmt.Printf("%s\n", version)
+
 	}
 }
