@@ -56,6 +56,7 @@ var (
 	defaultCredentialState = json.RawMessage(`"undefined"`)
 	defaultConfParams      = json.RawMessage(`{}`)
 	defaultParams          = json.RawMessage(`{}`)
+	defaultAdditionalLogins = json.RawMessage(`[]`)
 	defaultUserInfo        = json.RawMessage(`{
 		"iss": "https://issuer.example.com",
 		"sub": "123456789"
@@ -70,21 +71,29 @@ var (
 		"conf_params":   &defaultConfParams,
 		"params":        &defaultParams,
 		"user_info":     &defaultUserInfo,
+		"additional_logins": &defaultAdditionalLogins,
 	}
 
+	schemeAccessToken = v.Optional(v.String())
+	schemeUserInfo = v.Object(
+		v.ObjKV("iss", v.String()),
+		v.ObjKV("sub", v.String()),
+	)
+	schemeAdditionalLogins = v.Array(v.ArrEach(
+		v.Object(
+			v.ObjKV("user_info", schemeUserInfo),
+			v.ObjKV("access_token", schemeAccessToken),
+		),
+	))
 	pluginInputScheme = v.Object(
 		v.ObjKV("watts_version", v.String()),
 		v.ObjKV("watts_userid", v.String()),
 		v.ObjKV("cred_state", v.String()),
-		v.ObjKV("access_token", v.Optional(v.String())),
+		v.ObjKV("access_token", schemeAccessToken),
+		v.ObjKV("additional_logins", schemeAdditionalLogins),
 		v.ObjKV("conf_params", v.Object()),
 		v.ObjKV("params", v.Object()),
-		v.ObjKV("user_info",
-			v.Object(
-				v.ObjKV("iss", v.String()),
-				v.ObjKV("sub", v.String()),
-			),
-		),
+		v.ObjKV("user_info", schemeUserInfo),
 	)
 
 	schemes = map[string]v.Validator{
