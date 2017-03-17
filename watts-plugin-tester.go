@@ -28,7 +28,7 @@ type Output struct {
 type Output map[string](*json.RawMessage)
 
 var (
-	version = "0.0.1"
+	version = "0.1.0"
 
 	app                 = kingpin.New("watts-plugin-tester", "Test tool for watts plugins")
 	pluginTestAction    = app.Flag("plugin-action", "The plugin action to be tested. Defaults to \"parameter\"").Default("parameter").Short('a').String()
