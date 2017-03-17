@@ -16,12 +16,7 @@ import (
 
 
 type PluginInput map[string](*json.RawMessage)
-type PluginInputDirect map[string](*json.RawMessage)
 
-type User struct {
-	Issuer  string `json:"issuer"`
-	Subject string `json:"subject"`
-}
 
 type Output struct {
 	M map[string]string `json:"meta"`
