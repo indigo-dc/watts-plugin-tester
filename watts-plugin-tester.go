@@ -76,6 +76,7 @@ var (
 		v.ObjKV("watts_version", v.String()),
 		v.ObjKV("watts_userid", v.String()),
 		v.ObjKV("cred_state", v.String()),
+		v.ObjKV("access_token", v.Optional(v.String())),
 		v.ObjKV("conf_params", v.Object()),
 		v.ObjKV("params", v.Object()),
 		v.ObjKV("user_info",
@@ -173,26 +174,26 @@ func (p *PluginInput) validate() {
 }
 
 func (p *PluginInput) generateUserID() {
-	userIdJson := map[string]string{}
-	userIdJsonReduced := map[string]string{}
+	userIdJson := map[string](*json.RawMessage){}
+	userIdJsonReduced := map[string](*json.RawMessage){}
 
 	userInfo := *(*p)["user_info"]
 	//fmt.Printf("user_info: %s\n", userInfo)
 
 	err := json.Unmarshal(userInfo, &userIdJson)
+	if err != nil {
+		fmt.Printf("Error unmarshaling watts_userid: %s\n", err)
+		os.Exit(1)
+	}
+
 	//fmt.Printf("uid:%s\n", userIdJson)
 
 	userIdJsonReduced["iss"] = userIdJson["iss"]
 	userIdJsonReduced["sub"] = userIdJson["sub"]
 
-	if err != nil {
-		fmt.Printf("error generating watts_userid\n")
-		os.Exit(1)
-	}
-
-
 	j, err := json.Marshal(userIdJsonReduced)
 	//fmt.Printf("reduced uid:%s\n", j)
+
 	escaped := bytes.Replace(j, []byte{'/'}, []byte{'\\', '/'}, -1)
 	st := fmt.Sprintf("\"%s\"", base64url.Encode(escaped))
 	defaultWattsUserId = json.RawMessage(st)
