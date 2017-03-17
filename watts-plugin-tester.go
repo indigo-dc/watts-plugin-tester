@@ -47,35 +47,35 @@ var (
 	pluginTest     = app.Command("test", "Test a plugin")
 	pluginTestName = pluginTest.Arg("pluginName", "Name of the plugin to test").Required().String()
 
-	printDefault  = app.Command("default", "Print the default plugin input as json")
-	validateDefault = printDefault.Flag("validate", "Validate the produced json").Short('v').Bool()
-	printSpecific = app.Command("specific", "Print the plugin input (including the user override) as json")
+	printDefault     = app.Command("default", "Print the default plugin input as json")
+	validateDefault  = printDefault.Flag("validate", "Validate the produced json").Short('v').Bool()
+	printSpecific    = app.Command("specific", "Print the plugin input (including the user override) as json")
 	validateSpecific = printSpecific.Flag("validate", "Validate the produced json").Short('v').Bool()
 
-	defaultWattsVersion    = json.RawMessage(`"1.0.0"`)
-	defaultCredentialState = json.RawMessage(`"undefined"`)
-	defaultConfParams      = json.RawMessage(`{}`)
-	defaultParams          = json.RawMessage(`{}`)
+	defaultWattsVersion     = json.RawMessage(`"1.0.0"`)
+	defaultCredentialState  = json.RawMessage(`"undefined"`)
+	defaultConfParams       = json.RawMessage(`{}`)
+	defaultParams           = json.RawMessage(`{}`)
 	defaultAdditionalLogins = json.RawMessage(`[]`)
-	defaultUserInfo        = json.RawMessage(`{
+	defaultUserInfo         = json.RawMessage(`{
 		"iss": "https://issuer.example.com",
 		"sub": "123456789"
 	}`)
 
-	defaultAction =     json.RawMessage(`"parameter"`)
+	defaultAction      = json.RawMessage(`"parameter"`)
 	defaultWattsUserId = json.RawMessage(``)
 
 	defaultPluginInput = PluginInput{
-		"watts_version": &defaultWattsVersion,
-		"cred_state":    &defaultCredentialState,
-		"conf_params":   &defaultConfParams,
-		"params":        &defaultParams,
-		"user_info":     &defaultUserInfo,
+		"watts_version":     &defaultWattsVersion,
+		"cred_state":        &defaultCredentialState,
+		"conf_params":       &defaultConfParams,
+		"params":            &defaultParams,
+		"user_info":         &defaultUserInfo,
 		"additional_logins": &defaultAdditionalLogins,
 	}
 
 	schemeAccessToken = v.Optional(v.String())
-	schemeUserInfo = v.Object(
+	schemeUserInfo    = v.Object(
 		v.ObjKV("iss", v.String()),
 		v.ObjKV("sub", v.String()),
 	)
@@ -244,12 +244,12 @@ func (p *PluginInput) specifyPluginInput(path string) {
 	}
 
 	/*
-	o, _ := json.MarshalIndent(overridePluginInput, "", "  ")
-	p, _ := json.MarshalIndent(p, "", "  ")
-	fmt.Printf("---merging\n%s\n---and\n%s\n", o, p)
+		o, _ := json.MarshalIndent(overridePluginInput, "", "  ")
+		p, _ := json.MarshalIndent(p, "", "  ")
+		fmt.Printf("---merging\n%s\n---and\n%s\n", o, p)
 	*/
 
-	// merge the defaultPluginInput with the 
+	// merge the defaultPluginInput with the
 	err = mergo.Merge(&overridePluginInput, p)
 	if err != nil {
 		fmt.Println("Error merging: (", err, ")")
@@ -257,8 +257,8 @@ func (p *PluginInput) specifyPluginInput(path string) {
 	}
 
 	/*
-	o, _ = json.MarshalIndent(overridePluginInput, "", "  ")
-	fmt.Printf("---===\n%s\n", o)
+		o, _ = json.MarshalIndent(overridePluginInput, "", "  ")
+		fmt.Printf("---===\n%s\n", o)
 	*/
 
 	*p = overridePluginInput
@@ -331,16 +331,15 @@ func printOutput(o Output) {
 	return
 }
 
-
 /*
 * all plugin input generation shall take place here
-*/
+ */
 func main() {
 	switch kingpin.MustParse(app.Parse(os.Args[1:])) {
 	case pluginTest.FullCommand():
 		defaultPluginInput.specifyPluginInput(*pluginInputOverride)
 
-		defaultAction = json.RawMessage(fmt.Sprintf("\"%s\"", *pluginTestAction))	
+		defaultAction = json.RawMessage(fmt.Sprintf("\"%s\"", *pluginTestAction))
 		defaultPluginInput["action"] = &defaultAction
 
 		defaultPluginInput.generateUserID()
