@@ -48,7 +48,9 @@ var (
 	pluginTestName = pluginTest.Arg("pluginName", "Name of the plugin to test").Required().String()
 
 	printDefault  = app.Command("default", "Print the default plugin input as json")
+	validateDefault = printDefault.Flag("validate", "Validate the produced json").Short('v').Bool()
 	printSpecific = app.Command("specific", "Print the plugin input (including the user override) as json")
+	validateSpecific = printSpecific.Flag("validate", "Validate the produced json").Short('v').Bool()
 
 	defaultWattsVersion    = json.RawMessage(`"1.0.0"`)
 	defaultCredentialState = json.RawMessage(`"undefined"`)
@@ -145,6 +147,7 @@ func (p *PluginInput) validate() {
 
 	bs, er = json.MarshalIndent(p, "", "    ")
 	if er != nil {
+		//TODO rework output
 		fmt.Printf("--- plugin input:\n%s\n", *p)
 		fmt.Printf("--- bytes:\n%s\n", bs)
 		fmt.Printf("---error marshaling:\n%s\n", er)
@@ -161,7 +164,9 @@ func (p *PluginInput) validate() {
 		fmt.Printf("%s: %s\n", "Path", path)
 		os.Exit(1)
 	} else {
-		fmt.Printf("Validation passed\n")
+		if *validateSpecific || *validateDefault {
+			fmt.Printf("Plugin input validation passed\n")
+		}
 	}
 
 	return
@@ -217,14 +222,14 @@ func (p *PluginInput) specifyPluginInput(path string) {
 
 	overrideBytes, err := ioutil.ReadFile(*pluginInputOverride)
 	if err != nil {
-		fmt.Println("Error reading file ", *pluginInputOverride, " (", err, ")")
+		fmt.Println("Error reading user provided file ", *pluginInputOverride, " (", err, ")")
 		os.Exit(1)
 	}
 
 	overridePluginInput := PluginInput{}
 	err = json.Unmarshal(overrideBytes, &overridePluginInput)
 	if err != nil {
-		fmt.Println("Error unmarshaling: ", *pluginInputOverride, " (", err, ")")
+		fmt.Println("Error unmarshaling user provided json: ", *pluginInputOverride, " (", err, ")")
 		os.Exit(1)
 	}
 
@@ -338,11 +343,19 @@ func main() {
 		printOutput(o)
 
 	case printDefault.FullCommand():
+		if *validateDefault {
+			defaultPluginInput.validate()
+		}
+
 		fmt.Printf("%s", defaultPluginInput.marshalPluginInput())
 
 	case printSpecific.FullCommand():
 		defaultPluginInput.specifyPluginInput(*pluginInputOverride)
 		defaultPluginInput.generateUserID()
+		if *validateSpecific {
+			defaultPluginInput.validate()
+		}
+
 		fmt.Printf("%s", defaultPluginInput.marshalPluginInput())
 
 	case printVersion.FullCommand():
