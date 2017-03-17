@@ -18,16 +18,14 @@ import (
 type PluginInput map[string](*json.RawMessage)
 
 
+/*
 type Output struct {
-	M map[string]string `json:"meta"`
-	O json.RawMessage   `json:"output"`
+	Meta map[string]string `json:"meta"`
+	Input json.RawMessage   `json:"input"`
+	Output json.RawMessage   `json:"output"`
 }
-
-type ErrorOutput struct {
-	Meta          map[string]string `json:"meta"`
-	ErrorString   string            `json:"error"`
-	InvalidOutput string            `json:"invalid_output"`
-}
+*/
+type Output map[string](*json.RawMessage)
 
 var (
 	version = "0.0.1"
@@ -46,6 +44,8 @@ var (
 	validateDefault  = printDefault.Flag("validate", "Validate the produced json").Short('v').Bool()
 	printSpecific    = app.Command("specific", "Print the plugin input (including the user override) as json")
 	validateSpecific = printSpecific.Flag("validate", "Validate the produced json").Short('v').Bool()
+
+	outputMessages = []json.RawMessage{}
 
 	defaultWattsVersion     = json.RawMessage(`"1.0.0"`)
 	defaultCredentialState  = json.RawMessage(`"undefined"`)
@@ -213,7 +213,7 @@ func (p *PluginInput) marshalPluginInput() (s []byte) {
 
 	//p.validate()
 
-	s, err = json.MarshalIndent(*p, "", "    ")
+	s, err = json.MarshalIndent(*p, "    ", "    ")
 	if err != nil {
 		fmt.Printf("Unable to marshal: Error (%s)\n%s\n", err, s)
 		os.Exit(1)
@@ -264,10 +264,11 @@ func (p *PluginInput) specifyPluginInput(path string) {
 }
 
 func doPluginTest(pluginName string, pluginInputJson []byte) (output Output) {
-	output.M = map[string]string{}
+	output = Output{}
 
 	output.print("plugin_name", pluginName)
 	output.print("action", *pluginTestAction)
+	output.printJson("input", json.RawMessage(pluginInputJson))
 
 	inputBase64 := base64.StdEncoding.EncodeToString(pluginInputJson)
 	out, err := exec.Command(pluginName, inputBase64).CombinedOutput()
@@ -277,16 +278,13 @@ func doPluginTest(pluginName string, pluginInputJson []byte) (output Output) {
 		return
 	}
 
-	var pluginOutput interface{}
-	json.Unmarshal(out, &pluginOutput)
+	var pluginOutputJson interface{}
+	json.Unmarshal(out, &pluginOutputJson)
 
-	output.O = json.RawMessage(out)
-	if !*machineReadable {
-		b, _ := json.MarshalIndent(&pluginOutput, "", "    ")
-		fmt.Printf("%15s:\n%s\n", "output", string(b))
-	}
+	b, _ := json.MarshalIndent(&pluginOutputJson, "    ", "    ")
+	output.printJson("output", json.RawMessage(b))
 
-	path, errr := schemes[*pluginTestAction].Validate(pluginOutput)
+	path, errr := schemes[*pluginTestAction].Validate(pluginOutputJson)
 	if errr != nil {
 		output.print("result", "error")
 		output.print("description", fmt.Sprintf("Validation error at %s. Error (%s)", path, errr))
@@ -298,11 +296,21 @@ func doPluginTest(pluginName string, pluginInputJson []byte) (output Output) {
 	return
 }
 
-func (o *Output) print(identifier string, output string) {
-	o.M[identifier] = output
+func (o *Output) printJson(a string, b json.RawMessage) {
+	outputMessages = append(outputMessages, b)
+	(*o)[a] = &(outputMessages[len(outputMessages) -1])
 
 	if !*machineReadable {
-		fmt.Printf("%15s: %s\n", identifier, output)
+		fmt.Printf("%15s:\n%s\n", a, string(b))
+	}
+}
+func (o *Output) print(a string, b string) {
+	m := json.RawMessage(fmt.Sprintf("\"%s\"", b))
+	outputMessages = append(outputMessages, m)
+	(*o)[a] = &(outputMessages[len(outputMessages) -1])
+
+	if !*machineReadable {
+		fmt.Printf("%15s: %s\n", a, b)
 	}
 }
 
@@ -310,9 +318,10 @@ func printOutput(o Output) {
 	if *machineReadable {
 		bs, err := json.MarshalIndent(&o, "", "    ")
 		if err != nil {
+			/*
 			var eo ErrorOutput
-			eo.Meta = o.M
-			eo.InvalidOutput = string(o.O)
+			eo.Meta = o.Meta
+			eo.InvalidOutput = string(o.Output)
 			eo.ErrorString = fmt.Sprintf("%s", err)
 
 			bss, errr := json.MarshalIndent(&eo, "", "    ")
@@ -322,9 +331,9 @@ func printOutput(o Output) {
 				fmt.Println("watts-plugin-tester: ERROR")
 			}
 
-		} else {
-			fmt.Printf("%s", string(bs))
+			*/
 		}
+		fmt.Printf("%s", string(bs))
 	}
 	return
 }
@@ -344,7 +353,6 @@ func main() {
 
 		defaultPluginInput.validate()
 		pluginInputJson := defaultPluginInput.marshalPluginInput()
-		fmt.Printf("%s", pluginInputJson)
 
 		o := doPluginTest(*pluginTestName, pluginInputJson)
 		printOutput(o)
