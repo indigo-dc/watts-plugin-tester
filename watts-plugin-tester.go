@@ -39,6 +39,10 @@ var (
 
 	outputMessages = []json.RawMessage{}
 
+	// for MarshalIndent
+	outputIndentation = "                 "
+	outputTabWidth = "    "
+
 	defaultWattsVersion     = json.RawMessage(`"1.0.0"`)
 	defaultCredentialState  = json.RawMessage(`"undefined"`)
 	defaultConfParams       = json.RawMessage(`{}`)
@@ -150,7 +154,7 @@ func (p *PluginInput) validate() {
 	var bs []byte
 	var i interface{}
 
-	bs, er = json.MarshalIndent(p, "", "    ")
+	bs, er = json.MarshalIndent(p, outputIndentation, outputTabWidth)
 	if er != nil {
 		//TODO rework output
 		fmt.Printf("--- plugin input:\n%s\n", *p)
@@ -208,7 +212,7 @@ func (p *PluginInput) generateUserID() {
 func (p *PluginInput) marshalPluginInput() (s []byte) {
 	var err error
 
-	s, err = json.MarshalIndent(*p, "    ", "    ")
+	s, err = json.MarshalIndent(*p, outputIndentation, outputTabWidth)
 	if err != nil {
 		fmt.Printf("Unable to marshal: Error (%s)\n%s\n", err, s)
 		os.Exit(1)
@@ -264,7 +268,7 @@ func doPluginTest(pluginName string, pluginInputJson []byte) (output Output) {
 	var pluginOutputJson interface{}
 	json.Unmarshal(out, &pluginOutputJson)
 
-	b, _ := json.MarshalIndent(&pluginOutputJson, "    ", "    ")
+	b, _ := json.MarshalIndent(&pluginOutputJson, outputIndentation, outputTabWidth)
 	output.printJson("output", json.RawMessage(b))
 
 	path, errr := schemes[*pluginTestAction].Validate(pluginOutputJson)
@@ -284,7 +288,7 @@ func (o *Output) printJson(a string, b json.RawMessage) {
 	(*o)[a] = &(outputMessages[len(outputMessages) -1])
 
 	if !*machineReadable {
-		fmt.Printf("%15s:\n%s\n", a, string(b))
+		fmt.Printf("%15s: %s\n%15s\n\n", a, string(b), fmt.Sprintf("end of %s", a))
 	}
 }
 func (o *Output) print(a string, b string) {
@@ -299,7 +303,7 @@ func (o *Output) print(a string, b string) {
 
 func printOutput(o Output) {
 	if *machineReadable {
-		bs, err := json.MarshalIndent(&o, "", "    ")
+		bs, err := json.MarshalIndent(&o, outputIndentation, outputTabWidth)
 		if err != nil {
 			/*
 			TODO check if the handling of this case is needed
@@ -308,7 +312,7 @@ func printOutput(o Output) {
 			eo.InvalidOutput = string(o.Output)
 			eo.ErrorString = fmt.Sprintf("%s", err)
 
-			bss, errr := json.MarshalIndent(&eo, "", "    ")
+			bss, errr := json.MarshalIndent(&eo, outputIndentation, outputTabWidth)
 			if errr == nil {
 				fmt.Printf("%s", string(bss))
 			} else {
