@@ -17,14 +17,6 @@ import (
 
 type PluginInput map[string](*json.RawMessage)
 
-
-/*
-type Output struct {
-	Meta map[string]string `json:"meta"`
-	Input json.RawMessage   `json:"input"`
-	Output json.RawMessage   `json:"output"`
-}
-*/
 type Output map[string](*json.RawMessage)
 
 var (
@@ -211,8 +203,6 @@ func (p *PluginInput) generateUserID() {
 func (p *PluginInput) marshalPluginInput() (s []byte) {
 	var err error
 
-	//p.validate()
-
 	s, err = json.MarshalIndent(*p, "    ", "    ")
 	if err != nil {
 		fmt.Printf("Unable to marshal: Error (%s)\n%s\n", err, s)
@@ -241,23 +231,11 @@ func (p *PluginInput) specifyPluginInput(path string) {
 		os.Exit(1)
 	}
 
-	/*
-		o, _ := json.MarshalIndent(overridePluginInput, "", "  ")
-		p, _ := json.MarshalIndent(p, "", "  ")
-		fmt.Printf("---merging\n%s\n---and\n%s\n", o, p)
-	*/
-
-	// merge the defaultPluginInput with the
 	err = mergo.Merge(&overridePluginInput, p)
 	if err != nil {
 		fmt.Println("Error merging: (", err, ")")
 		os.Exit(1)
 	}
-
-	/*
-		o, _ = json.MarshalIndent(overridePluginInput, "", "  ")
-		fmt.Printf("---===\n%s\n", o)
-	*/
 
 	*p = overridePluginInput
 	return
@@ -319,6 +297,7 @@ func printOutput(o Output) {
 		bs, err := json.MarshalIndent(&o, "", "    ")
 		if err != nil {
 			/*
+			TODO check if the handling of this case is needed
 			var eo ErrorOutput
 			eo.Meta = o.Meta
 			eo.InvalidOutput = string(o.Output)
