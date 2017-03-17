@@ -85,14 +85,17 @@ var (
 			v.ObjKV("access_token", schemeAccessToken),
 		),
 	))
+	schemeParams = v.Object(
+		v.ObjKeys(v.String(v.StrRegExp("^[a-z0-9_]+$"))),
+	)
 	pluginInputScheme = v.Object(
 		v.ObjKV("watts_version", v.String()),
 		v.ObjKV("watts_userid", v.String()),
 		v.ObjKV("cred_state", v.String()),
 		v.ObjKV("access_token", schemeAccessToken),
 		v.ObjKV("additional_logins", schemeAdditionalLogins),
-		v.ObjKV("conf_params", v.Object()),
-		v.ObjKV("params", v.Object()),
+		v.ObjKV("conf_params", schemeParams),
+		v.ObjKV("params", schemeParams),
 		v.ObjKV("user_info", schemeUserInfo),
 	)
 
