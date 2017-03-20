@@ -196,8 +196,8 @@ func (p *PluginInput) generateUserID() {
 
 	//fmt.Printf("uid:%s\n", userIdJson)
 
-	userIdJsonReduced["iss"] = userIdJson["iss"]
-	userIdJsonReduced["sub"] = userIdJson["sub"]
+	userIdJsonReduced["issuer"] = userIdJson["iss"]
+	userIdJsonReduced["subject"] = userIdJson["sub"]
 
 	j, err := json.Marshal(userIdJsonReduced)
 	//fmt.Printf("reduced uid:%s\n", j)
