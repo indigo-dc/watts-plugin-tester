@@ -250,78 +250,121 @@ func (p *PluginInput) specifyPluginInput(path string) {
 	return
 }
 
-func doPluginTest(pluginName string, pluginInputJson []byte) (output Output) {
+func (pluginInput *PluginInput) doPluginTest(pluginName string) (output Output) {
 	output = Output{}
+
+	pluginInputJson := pluginInput.marshalPluginInput()
 
 	output.print("plugin_name", pluginName)
 	output.print("action", *pluginTestAction)
 	output.printJson("input", json.RawMessage(pluginInputJson))
 
 	inputBase64 := base64.StdEncoding.EncodeToString(pluginInputJson)
-	out, err := exec.Command(pluginName, inputBase64).CombinedOutput()
+
+	pluginOutput, err := exec.Command(pluginName, inputBase64).CombinedOutput()
 	if err != nil {
 		output.print("result", "error")
 		output.print("description", "error executing the plugin")
 		return
 	}
 
-	var pluginOutputJson interface{}
-	json.Unmarshal(out, &pluginOutputJson)
+	output.printJson("output", byteToRawMessage(pluginOutput))
+	//fmt.Printf("pluginOutput: %s\n", pluginOutput)
 
-	b, _ := json.MarshalIndent(&pluginOutputJson, outputIndentation, outputTabWidth)
-	output.printJson("output", json.RawMessage(b))
 
-	path, errr := schemes[*pluginTestAction].Validate(pluginOutputJson)
+
+	/*
+	pluginOutputJson := json.RawMessage(``)
+	err = json.Unmarshal(pluginOutput, &pluginOutputJson)
+	if err != nil {
+		output.print("output", string(pluginOutput))
+	} else {
+		output.printJson("output", pluginOutputJson)
+	}
+
+	fmt.Printf("Output: %s\n", output)
+	*/
+
+
+	var pluginOutputInterface interface{}
+	err = json.Unmarshal(pluginOutput, &pluginOutputInterface)
+	if err != nil {
+		output.print("result", "error")
+		output.print("error", fmt.Sprintf("%s", err))
+		output.print("description", "error processing the output of the plugin (into an interface)")
+		return
+	}
+
+	path, errr := schemes[*pluginTestAction].Validate(pluginOutputInterface)
 	if errr != nil {
 		output.print("result", "error")
 		output.print("description", fmt.Sprintf("Validation error at %s. Error (%s)", path, errr))
 		return
+	} else {
+		output.print("result", "ok")
+		output.print("description", "validation passed")
 	}
 
-	output.print("result", "ok")
-	output.print("description", "validation passed")
 	return
 }
 
+
 func (o *Output) printJson(a string, b json.RawMessage) {
+	if !*machineReadable {
+		bs, err := json.MarshalIndent(&b, outputIndentation, outputTabWidth) 
+		if err != nil {
+			fmt.Printf("%15s: %s\n%15s\n\n", a, string(b), fmt.Sprintf("end of %s", a))
+		} else {
+			fmt.Printf("%15s: %s\n%15s\n\n", a, string(bs), fmt.Sprintf("end of %s", a))
+		}
+		return
+	}
 	outputMessages = append(outputMessages, b)
 	(*o)[a] = &(outputMessages[len(outputMessages) -1])
 
-	if !*machineReadable {
-		fmt.Printf("%15s: %s\n%15s\n\n", a, string(b), fmt.Sprintf("end of %s", a))
-	}
 }
 func (o *Output) print(a string, b string) {
+	if !*machineReadable {
+		fmt.Printf("%15s: %s\n", a, b)
+		return
+	}
+
 	m := json.RawMessage(fmt.Sprintf("\"%s\"", b))
 	outputMessages = append(outputMessages, m)
 	(*o)[a] = &(outputMessages[len(outputMessages) -1])
+}
 
+func (o Output)  String() string {
 	if !*machineReadable {
-		fmt.Printf("%15s: %s\n", a, b)
+		return ""
+	}
+
+	bs, err := json.MarshalIndent(&o, "", outputTabWidth)
+	if err != nil {
+		return fmt.Sprintf("error producing machine readable output: %s\n%s\n", err)
+	} else {
+		return fmt.Sprintf("%s", string(bs))
 	}
 }
 
-func printOutput(o Output) {
-	if *machineReadable {
-		bs, err := json.MarshalIndent(&o, outputIndentation, outputTabWidth)
-		if err != nil {
-			/*
-			TODO check if the handling of this case is needed
-			var eo ErrorOutput
-			eo.Meta = o.Meta
-			eo.InvalidOutput = string(o.Output)
-			eo.ErrorString = fmt.Sprintf("%s", err)
+func byteToRawMessage(inputBytes []byte) (rawMessage json.RawMessage) {
+	//fmt.Printf("%s\n", string(inputBytes))
 
-			bss, errr := json.MarshalIndent(&eo, outputIndentation, outputTabWidth)
-			if errr == nil {
-				fmt.Printf("%s", string(bss))
-			} else {
-				fmt.Println("watts-plugin-tester: ERROR")
-			}
-
-			*/
+	testJsonObject := map[string]interface{}{}
+	err := json.Unmarshal(inputBytes, &testJsonObject)
+	if err != nil {
+		rawMessage = json.RawMessage(fmt.Sprintf("\"%s\"", string(inputBytes)))
+		//fmt.Printf("could not convert to json: %s\n", string(inputBytes))
+	} else {
+		jsonObject := json.RawMessage(``)
+		errr := json.Unmarshal(inputBytes, &jsonObject)
+		if errr != nil {
+			rawMessage = json.RawMessage(fmt.Sprintf("\"error marshaling json '%s'\"", string(inputBytes)))
+			//fmt.Printf("test successful, but bad json conversion%s\n", string(inputBytes))
+		} else {
+			rawMessage = jsonObject
+			//fmt.Printf("successful json conversion%s\n", string(inputBytes))
 		}
-		fmt.Printf("%s", string(bs))
 	}
 	return
 }
@@ -338,12 +381,9 @@ func main() {
 		defaultPluginInput["action"] = &defaultAction
 
 		defaultPluginInput.generateUserID()
-
 		defaultPluginInput.validate()
-		pluginInputJson := defaultPluginInput.marshalPluginInput()
 
-		o := doPluginTest(*pluginTestName, pluginInputJson)
-		printOutput(o)
+		fmt.Printf("%s", defaultPluginInput.doPluginTest(*pluginTestName))
 
 	case printDefault.FullCommand():
 		if *validateDefault {
