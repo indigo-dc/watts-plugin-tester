@@ -348,22 +348,20 @@ func (o Output)  String() string {
 }
 
 func byteToRawMessage(inputBytes []byte) (rawMessage json.RawMessage) {
-	//fmt.Printf("%s\n", string(inputBytes))
-
 	testJsonObject := map[string]interface{}{}
 	err := json.Unmarshal(inputBytes, &testJsonObject)
 	if err != nil {
-		rawMessage = json.RawMessage(fmt.Sprintf("\"%s\"", string(inputBytes)))
-		//fmt.Printf("could not convert to json: %s\n", string(inputBytes))
+		os.Stderr.WriteString(fmt.Sprintf("got invalid json: '%s'\n", string(inputBytes)))
+		rawMessage = json.RawMessage(fmt.Sprintf("\"%s\"", "got erroneous output"))
 	} else {
 		jsonObject := json.RawMessage(``)
 		errr := json.Unmarshal(inputBytes, &jsonObject)
 		if errr != nil {
+			fmt.Printf("test successful, but bad json conversion%s\n", string(inputBytes))
 			rawMessage = json.RawMessage(fmt.Sprintf("\"error marshaling json '%s'\"", string(inputBytes)))
-			//fmt.Printf("test successful, but bad json conversion%s\n", string(inputBytes))
 		} else {
+			fmt.Printf("successful json conversion%s\n", string(inputBytes))
 			rawMessage = jsonObject
-			//fmt.Printf("successful json conversion%s\n", string(inputBytes))
 		}
 	}
 	return
