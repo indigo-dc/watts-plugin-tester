@@ -90,62 +90,65 @@ var (
 		v.ObjKV("user_info", schemeUserInfo),
 	)
 
-	schemes = map[string]v.Validator{
-		"parameter": v.Object(
-			v.ObjKV("result", v.String(v.StrIs("ok"))),
-			v.ObjKV("conf_params", v.Array(v.ArrEach(
-				v.Object(
-					v.ObjKV("name", v.String()),
-					v.ObjKV("type", v.String()),
-					v.ObjKV("default", v.String()),
-				),
-			))),
-			v.ObjKV("request_params", v.Array(v.ArrEach(
-				v.Array(v.ArrEach(
-					v.Object(
-						v.ObjKV("key", v.String()),
-						v.ObjKV("name", v.String()),
-						v.ObjKV("description", v.String()),
-						v.ObjKV("type", v.String()),
-						v.ObjKV("mandatory", v.Boolean()),
-					),
-				)),
-			))),
-			v.ObjKV("version", v.String()),
-		),
-		"request": v.Or(
-			v.Object(
+	wattsSchemes = map[string](map[string]v.Validator){
+		"1.0.0": map[string]v.Validator{
+			"parameter": v.Object(
 				v.ObjKV("result", v.String(v.StrIs("ok"))),
-				v.ObjKV("credential", v.Array(v.ArrEach(
+				v.ObjKV("conf_params", v.Array(v.ArrEach(
 					v.Object(
 						v.ObjKV("name", v.String()),
 						v.ObjKV("type", v.String()),
-						v.ObjKV("value", v.String()),
+						v.ObjKV("default", v.String()),
 					),
 				))),
-				v.ObjKV("state", v.String()),
+				v.ObjKV("request_params", v.Array(v.ArrEach(
+					v.Array(v.ArrEach(
+						v.Object(
+							v.ObjKV("key", v.String()),
+							v.ObjKV("name", v.String()),
+							v.ObjKV("description", v.String()),
+							v.ObjKV("type", v.String()),
+							v.ObjKV("mandatory", v.Boolean()),
+						),
+					)),
+				))),
+				v.ObjKV("version", v.String()),
 			),
-			v.Object(
-				v.ObjKV("result", v.String(v.StrIs("error"))),
-				v.ObjKV("user_msg", v.String()),
-				v.ObjKV("log_msg", v.String()),
+			"request": v.Or(
+				v.Object(
+					v.ObjKV("result", v.String(v.StrIs("ok"))),
+					v.ObjKV("credential", v.Array(v.ArrEach(
+						v.Object(
+							v.ObjKV("name", v.String()),
+							v.ObjKV("type", v.String()),
+							v.ObjKV("value", v.String()),
+						),
+					))),
+					v.ObjKV("state", v.String()),
+				),
+				v.Object(
+					v.ObjKV("result", v.String(v.StrIs("error"))),
+					v.ObjKV("user_msg", v.String()),
+					v.ObjKV("log_msg", v.String()),
+				),
+				v.Object(
+					v.ObjKV("result", v.String(v.StrIs("oidc_login"))),
+					v.ObjKV("provider", v.String()),
+					v.ObjKV("_msg", v.String()),
+				),
 			),
-			v.Object(
-				v.ObjKV("result", v.String(v.StrIs("oidc_login"))),
-				v.ObjKV("provider", v.String()),
-				v.ObjKV("_msg", v.String()),
+			"revoke": v.Or(
+				v.Object(
+					v.ObjKV("result", v.String(v.StrIs("ok"))),
+				),
+				v.Object(
+					v.ObjKV("result", v.String(v.StrIs("error"))),
+					v.ObjKV("user_msg", v.String()),
+					v.ObjKV("log_msg", v.String()),
+				),
 			),
-		),
-		"revoke": v.Or(
-			v.Object(
-				v.ObjKV("result", v.String(v.StrIs("ok"))),
-			),
-			v.Object(
-				v.ObjKV("result", v.String(v.StrIs("error"))),
-				v.ObjKV("user_msg", v.String()),
-				v.ObjKV("log_msg", v.String()),
-			),
-		),
+		}, // end of "1.0.0"
+
 	}
 )
 
@@ -253,6 +256,18 @@ func (p *PluginInput) specifyPluginInput(path string) {
 func (pluginInput *PluginInput) doPluginTest(pluginName string) (output Output) {
 	output = Output{}
 
+	
+	var wattsVersion string
+	rv := (*pluginInput)["watts_version"]
+	v, err := json.Marshal(&rv)
+	if err == nil {
+		wattsVersion = string(bytes.Replace(v, []byte{'"'}, []byte{}, -1))
+	} else {
+		fmt.Printf("error %s\n", err)
+		os.Exit(1)
+	}
+
+
 	pluginInputJson := pluginInput.marshalPluginInput()
 
 	output.print("plugin_name", pluginName)
@@ -295,7 +310,7 @@ func (pluginInput *PluginInput) doPluginTest(pluginName string) (output Output) 
 		return
 	}
 
-	path, errr := schemes[*pluginTestAction].Validate(pluginOutputInterface)
+	path, errr := wattsSchemes[wattsVersion][*pluginTestAction].Validate(pluginOutputInterface)
 	if errr != nil {
 		output.print("result", "error")
 		output.print("description", fmt.Sprintf("Validation error at %s. Error (%s)", path, errr))
