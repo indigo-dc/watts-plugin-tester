@@ -20,7 +20,7 @@ type PluginInput map[string](*json.RawMessage)
 type Output map[string](*json.RawMessage)
 
 var (
-	version = "0.1.3"
+	version = "0.1.4"
 
 	app                 = kingpin.New("watts-plugin-tester", "Test tool for watts plugins")
 	pluginTestAction    = app.Flag("plugin-action", "The plugin action to be tested. Defaults to \"parameter\"").Default("parameter").Short('a').String()
