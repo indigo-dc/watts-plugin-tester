@@ -134,7 +134,7 @@ var (
 				v.Object(
 					v.ObjKV("result", v.String(v.StrIs("oidc_login"))),
 					v.ObjKV("provider", v.String()),
-					v.ObjKV("_msg", v.String()),
+					v.ObjKV("msg", v.String()),
 				),
 			),
 			"revoke": v.Or(
