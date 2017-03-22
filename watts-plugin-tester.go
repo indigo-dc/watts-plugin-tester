@@ -79,6 +79,18 @@ var (
 	schemeParams = v.Object(
 		v.ObjKeys(v.String(v.StrRegExp("^[a-z0-9_]+$"))),
 	)
+	schemeCredential = v.Object(
+		v.ObjKV("name", v.String()),
+		v.ObjKV("type", v.String()),
+		v.ObjKV("value", v.String()),
+	),
+	schemeRequestParam = v.Object(
+		v.ObjKV("key", v.String()),
+		v.ObjKV("name", v.String()),
+		v.ObjKV("description", v.String()),
+		v.ObjKV("type", v.String()),
+		v.ObjKV("mandatory", v.Boolean()),
+	),
 	pluginInputScheme = v.Object(
 		v.ObjKV("watts_version", v.String()),
 		v.ObjKV("watts_userid", v.String()),
@@ -94,36 +106,16 @@ var (
 		"1.0.0": map[string]v.Validator{
 			"parameter": v.Object(
 				v.ObjKV("result", v.String(v.StrIs("ok"))),
-				v.ObjKV("conf_params", v.Array(v.ArrEach(
-					v.Object(
-						v.ObjKV("name", v.String()),
-						v.ObjKV("type", v.String()),
-						v.ObjKV("default", v.String()),
-					),
-				))),
-				v.ObjKV("request_params", v.Array(v.ArrEach(
-					v.Array(v.ArrEach(
-						v.Object(
-							v.ObjKV("key", v.String()),
-							v.ObjKV("name", v.String()),
-							v.ObjKV("description", v.String()),
-							v.ObjKV("type", v.String()),
-							v.ObjKV("mandatory", v.Boolean()),
-						),
-					)),
-				))),
+				v.ObjKV("credential", v.Array(v.ArrEach(schemeCredential))),
 				v.ObjKV("version", v.String()),
+				v.ObjKV("request_params", v.Array(v.ArrEach(
+					v.Array(v.ArrEach(schemeRequestParam)),
+				))),
 			),
 			"request": v.Or(
 				v.Object(
 					v.ObjKV("result", v.String(v.StrIs("ok"))),
-					v.ObjKV("credential", v.Array(v.ArrEach(
-						v.Object(
-							v.ObjKV("name", v.String()),
-							v.ObjKV("type", v.String()),
-							v.ObjKV("value", v.String()),
-						),
-					))),
+					v.ObjKV("credential", v.Array(v.ArrEach(schemeCredential))),
 					v.ObjKV("state", v.String()),
 				),
 				v.Object(
