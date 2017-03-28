@@ -20,7 +20,7 @@ type PluginInput map[string](*json.RawMessage)
 type Output map[string](*json.RawMessage)
 
 var (
-	version = "0.1.5"
+	version = "0.1.6"
 
 	app                 = kingpin.New("watts-plugin-tester", "Test tool for watts plugins")
 	pluginTestAction    = app.Flag("plugin-action", "The plugin action to be tested. Defaults to \"parameter\"").Default("parameter").Short('a').String()
@@ -121,7 +121,10 @@ var (
 						v.Object(
 							v.ObjKV("name", v.String()),
 							v.ObjKV("type", v.String()),
-							v.ObjKV("value", v.String()),
+							v.ObjKV("value", v.Or(v.String(), v.Array(v.ArrEach(v.String())))),
+              v.ObjKV("save_as", v.Optional(v.String())),
+              v.ObjKV("rows", v.Optional(v.Number())),
+              v.ObjKV("cols", v.Optional(v.Number())),
 						),
 					))),
 					v.ObjKV("state", v.String()),
