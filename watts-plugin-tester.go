@@ -20,7 +20,7 @@ type PluginInput map[string](*json.RawMessage)
 type Output map[string](*json.RawMessage)
 
 var (
-	version = "0.1.4"
+	version = "0.1.5"
 
 	app                 = kingpin.New("watts-plugin-tester", "Test tool for watts plugins")
 	pluginTestAction    = app.Flag("plugin-action", "The plugin action to be tested. Defaults to \"parameter\"").Default("parameter").Short('a').String()
@@ -262,6 +262,9 @@ func (pluginInput *PluginInput) doPluginTest(pluginName string) (output Output) 
 	v, err := json.Marshal(&rv)
 	if err == nil {
 		wattsVersion = string(bytes.Replace(v, []byte{'"'}, []byte{}, -1))
+        if _, versionFound := wattsSchemes[wattsVersion]; !versionFound {
+            wattsVersion = string(bytes.Replace(defaultWattsVersion, []byte{'"'}, []byte{}, -1))
+        }
 	} else {
 		fmt.Printf("error %s\n", err)
 		os.Exit(1)
