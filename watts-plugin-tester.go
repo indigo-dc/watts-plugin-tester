@@ -121,7 +121,7 @@ var (
 						v.Object(
 							v.ObjKV("name", v.String()),
 							v.ObjKV("type", v.String()),
-							v.ObjKV("value", v.Or(v.String(), v.Array(v.ArrEach(v.String())))),
+							v.ObjKV("value", v.String()),
               v.ObjKV("save_as", v.Optional(v.String())),
               v.ObjKV("rows", v.Optional(v.Number())),
               v.ObjKV("cols", v.Optional(v.Number())),
