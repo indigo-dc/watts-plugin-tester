@@ -116,6 +116,16 @@ var (
 			),
 			"request": v.Or(
 				v.Object(
+					v.ObjKV("result", v.String(v.StrIs("error"))),
+					v.ObjKV("user_msg", v.String()),
+					v.ObjKV("log_msg", v.String()),
+				),
+				v.Object(
+					v.ObjKV("result", v.String(v.StrIs("oidc_login"))),
+					v.ObjKV("provider", v.String()),
+					v.ObjKV("_msg", v.String()),
+				),
+				v.Object(
 					v.ObjKV("result", v.String(v.StrIs("ok"))),
 					v.ObjKV("credential", v.Array(v.ArrEach(
 						v.Object(
@@ -129,26 +139,18 @@ var (
 					))),
 					v.ObjKV("state", v.String()),
 				),
-				v.Object(
-					v.ObjKV("result", v.String(v.StrIs("error"))),
-					v.ObjKV("user_msg", v.String()),
-					v.ObjKV("log_msg", v.String()),
-				),
-				v.Object(
-					v.ObjKV("result", v.String(v.StrIs("oidc_login"))),
-					v.ObjKV("provider", v.String()),
-					v.ObjKV("_msg", v.String()),
-				),
+
 			),
 			"revoke": v.Or(
 				v.Object(
-					v.ObjKV("result", v.String(v.StrIs("ok"))),
-				),
-				v.Object(
 					v.ObjKV("result", v.String(v.StrIs("error"))),
 					v.ObjKV("user_msg", v.String()),
 					v.ObjKV("log_msg", v.String()),
 				),
+				v.Object(
+					v.ObjKV("result", v.String(v.StrIs("ok"))),
+				),
+
 			),
 		}, // end of "1.0.0"
 
