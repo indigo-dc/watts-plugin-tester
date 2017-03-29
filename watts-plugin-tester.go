@@ -14,7 +14,6 @@ import (
 	"os/exec"
 )
 
-
 type PluginInput map[string](*json.RawMessage)
 
 type Output map[string](*json.RawMessage)
@@ -41,7 +40,7 @@ var (
 
 	// for MarshalIndent
 	outputIndentation = "                 "
-	outputTabWidth = "    "
+	outputTabWidth    = "    "
 
 	defaultWattsVersion     = json.RawMessage(`"1.0.0"`)
 	defaultCredentialState  = json.RawMessage(`"undefined"`)
@@ -124,11 +123,6 @@ var (
 			),
 			"request": v.Or(
 				v.Object(
-					v.ObjKV("result", v.String(v.StrIs("ok"))),
-					v.ObjKV("credential", v.Array(v.ArrEach(schemeCredential))),
-					v.ObjKV("state", v.String()),
-				),
-				v.Object(
 					v.ObjKV("result", v.String(v.StrIs("error"))),
 					v.ObjKV("user_msg", v.String()),
 					v.ObjKV("log_msg", v.String()),
@@ -138,15 +132,20 @@ var (
 					v.ObjKV("provider", v.String()),
 					v.ObjKV("msg", v.String()),
 				),
-			),
-			"revoke": v.Or(
 				v.Object(
 					v.ObjKV("result", v.String(v.StrIs("ok"))),
+					v.ObjKV("credential", v.Array(v.ArrEach(schemeCredential))),
+					v.ObjKV("state", v.String()),
 				),
+			),
+			"revoke": v.Or(
 				v.Object(
 					v.ObjKV("result", v.String(v.StrIs("error"))),
 					v.ObjKV("user_msg", v.String()),
 					v.ObjKV("log_msg", v.String()),
+				),
+				v.Object(
+					v.ObjKV("result", v.String(v.StrIs("ok"))),
 				),
 			),
 		}, // end of "1.0.0"
@@ -258,7 +257,6 @@ func (p *PluginInput) specifyPluginInput(path string) {
 func (pluginInput *PluginInput) doPluginTest(pluginName string) (output Output) {
 	output = Output{}
 
-
 	var wattsVersion string
 	rv := (*pluginInput)["watts_version"]
 	v, err := json.Marshal(&rv)
@@ -271,7 +269,6 @@ func (pluginInput *PluginInput) doPluginTest(pluginName string) (output Output) 
 		fmt.Printf("error %s\n", err)
 		os.Exit(1)
 	}
-
 
 	pluginInputJson := pluginInput.marshalPluginInput()
 
@@ -291,20 +288,17 @@ func (pluginInput *PluginInput) doPluginTest(pluginName string) (output Output) 
 	output.printJson("output", byteToRawMessage(pluginOutput))
 	//fmt.Printf("pluginOutput: %s\n", pluginOutput)
 
-
-
 	/*
-	pluginOutputJson := json.RawMessage(``)
-	err = json.Unmarshal(pluginOutput, &pluginOutputJson)
-	if err != nil {
-		output.print("output", string(pluginOutput))
-	} else {
-		output.printJson("output", pluginOutputJson)
-	}
+		pluginOutputJson := json.RawMessage(``)
+		err = json.Unmarshal(pluginOutput, &pluginOutputJson)
+		if err != nil {
+			output.print("output", string(pluginOutput))
+		} else {
+			output.printJson("output", pluginOutputJson)
+		}
 
-	fmt.Printf("Output: %s\n", output)
+		fmt.Printf("Output: %s\n", output)
 	*/
-
 
 	var pluginOutputInterface interface{}
 	err = json.Unmarshal(pluginOutput, &pluginOutputInterface)
@@ -328,10 +322,9 @@ func (pluginInput *PluginInput) doPluginTest(pluginName string) (output Output) 
 	return
 }
 
-
 func (o *Output) printJson(a string, b json.RawMessage) {
 	if !*machineReadable {
-		bs, err := json.MarshalIndent(&b, outputIndentation, outputTabWidth) 
+		bs, err := json.MarshalIndent(&b, outputIndentation, outputTabWidth)
 		if err != nil {
 			fmt.Printf("%15s: %s\n%15s\n\n", a, string(b), fmt.Sprintf("end of %s", a))
 		} else {
@@ -340,7 +333,7 @@ func (o *Output) printJson(a string, b json.RawMessage) {
 		return
 	}
 	outputMessages = append(outputMessages, b)
-	(*o)[a] = &(outputMessages[len(outputMessages) -1])
+	(*o)[a] = &(outputMessages[len(outputMessages)-1])
 
 }
 func (o *Output) print(a string, b string) {
@@ -351,10 +344,10 @@ func (o *Output) print(a string, b string) {
 
 	m := json.RawMessage(fmt.Sprintf("\"%s\"", b))
 	outputMessages = append(outputMessages, m)
-	(*o)[a] = &(outputMessages[len(outputMessages) -1])
+	(*o)[a] = &(outputMessages[len(outputMessages)-1])
 }
 
-func (o Output)  String() string {
+func (o Output) String() string {
 	if !*machineReadable {
 		return ""
 	}
@@ -388,7 +381,7 @@ func byteToRawMessage(inputBytes []byte) (rawMessage json.RawMessage) {
 
 /*
 * all plugin input generation shall take place here
-*/
+ */
 func main() {
 	switch kingpin.MustParse(app.Parse(os.Args[1:])) {
 	case pluginTest.FullCommand():
