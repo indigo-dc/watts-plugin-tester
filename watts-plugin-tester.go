@@ -20,7 +20,7 @@ type PluginInput map[string](*json.RawMessage)
 type Output map[string](*json.RawMessage)
 
 var (
-	version = "0.1.4"
+	version = "0.1.6"
 
 	app                 = kingpin.New("watts-plugin-tester", "Test tool for watts plugins")
 	pluginTestAction    = app.Flag("plugin-action", "The plugin action to be tested. Defaults to \"parameter\"").Default("parameter").Short('a').String()
@@ -83,14 +83,17 @@ var (
 		v.ObjKV("name", v.String()),
 		v.ObjKV("type", v.String()),
 		v.ObjKV("value", v.String()),
-	),
+		v.ObjKV("save_as", v.Optional(v.String())),
+		v.ObjKV("rows", v.Optional(v.Number())),
+		v.ObjKV("cols", v.Optional(v.Number())),
+	)
 	schemeRequestParam = v.Object(
 		v.ObjKV("key", v.String()),
 		v.ObjKV("name", v.String()),
 		v.ObjKV("description", v.String()),
 		v.ObjKV("type", v.String()),
 		v.ObjKV("mandatory", v.Boolean()),
-	),
+	)
 	pluginInputScheme = v.Object(
 		v.ObjKV("watts_version", v.String()),
 		v.ObjKV("watts_userid", v.String()),
@@ -108,6 +111,13 @@ var (
 				v.ObjKV("result", v.String(v.StrIs("ok"))),
 				v.ObjKV("credential", v.Array(v.ArrEach(schemeCredential))),
 				v.ObjKV("version", v.String()),
+				v.ObjKV("conf_params", v.Array(v.ArrEach(
+					v.Object(
+						v.ObjKV("name", v.String()),
+						v.ObjKV("type", v.String()),
+						v.ObjKV("default", v.String()),
+					),
+				))),
 				v.ObjKV("request_params", v.Array(v.ArrEach(
 					v.Array(v.ArrEach(schemeRequestParam)),
 				))),
@@ -248,12 +258,15 @@ func (p *PluginInput) specifyPluginInput(path string) {
 func (pluginInput *PluginInput) doPluginTest(pluginName string) (output Output) {
 	output = Output{}
 
-	
+
 	var wattsVersion string
 	rv := (*pluginInput)["watts_version"]
 	v, err := json.Marshal(&rv)
 	if err == nil {
 		wattsVersion = string(bytes.Replace(v, []byte{'"'}, []byte{}, -1))
+		if _, versionFound := wattsSchemes[wattsVersion]; !versionFound {
+			wattsVersion = string(bytes.Replace(defaultWattsVersion, []byte{'"'}, []byte{}, -1))
+		}
 	} else {
 		fmt.Printf("error %s\n", err)
 		os.Exit(1)
@@ -375,7 +388,7 @@ func byteToRawMessage(inputBytes []byte) (rawMessage json.RawMessage) {
 
 /*
 * all plugin input generation shall take place here
- */
+*/
 func main() {
 	switch kingpin.MustParse(app.Parse(os.Args[1:])) {
 	case pluginTest.FullCommand():
