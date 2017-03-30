@@ -108,7 +108,6 @@ var (
 		"1.0.0": map[string]v.Validator{
 			"parameter": v.Object(
 				v.ObjKV("result", v.String(v.StrIs("ok"))),
-				v.ObjKV("credential", v.Array(v.ArrEach(schemeCredential))),
 				v.ObjKV("version", v.String()),
 				v.ObjKV("conf_params", v.Array(v.ArrEach(
 					v.Object(
