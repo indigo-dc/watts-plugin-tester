@@ -1,0 +1,20 @@
+{
+  "name": "watts-plugin-tester",
+  "version": "!version!",
+  "arch": "!arch!",
+  "release": "1",
+  "summary": "WaTTS plugin testing at command line",
+  "group": "Applications/Internet",
+  "license": "LICENSE",
+  "url": "http://github.com/indigo-dc/!name!",
+  "description": "a command line testing tool for WaTTS plugins",
+  "changelog-cmd": "changelog rpm",
+  "files": [
+    {
+      "from": "build/!arch!/!name!",
+      "to": "%{_bindir}/",
+      "base": "build/!arch!/",
+      "type": ""
+    }
+  ]
+}
