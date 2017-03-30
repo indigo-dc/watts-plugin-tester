@@ -22,5 +22,9 @@ _testmain.go
 *.exe
 *.test
 *.prof
+*~
 
 watts-plugin-tester
+watts-plugin-tester_container*.tar
+src
+pkg

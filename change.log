@@ -1,0 +1,16 @@
+
+UNRELEASED
+
+  * Merge pull request #1 from indigo-dc/help_flag
+    
+    specify help flag
+  * use --help
+  * ignore binary output
+  * copy work done by @lburgey to github
+  * Initial commit
+
+  - Bas Wegh <BasWegh@gmx.de>
+
+-- Bas Wegh <BasWegh@gmx.de>; Thu, 30 Mar 2017 07:37:09 +0200
+
+
