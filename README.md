@@ -1,2 +1,14 @@
-# watts-plugin-tester
-a test tool for WaTTS plugin at the command line
+watts-plugin-tester
+====
+
+
+build
+----
+go get && go build
+
+
+usage
+----
+./watts-plugin-tester help
+
+
