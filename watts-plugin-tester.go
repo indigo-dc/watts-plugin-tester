@@ -280,6 +280,7 @@ func (pluginInput *PluginInput) doPluginTest(pluginName string) (output Output) 
 	pluginOutput, err := exec.Command(pluginName, inputBase64).CombinedOutput()
 	if err != nil {
 		output.print("result", "error")
+		output.print("error", fmt.Sprint(err))
 		output.print("description", "error executing the plugin")
 		return
 	}
