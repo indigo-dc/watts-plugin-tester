@@ -12,6 +12,7 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
+	"time"
 )
 
 type PluginInput map[string](*json.RawMessage)
@@ -277,7 +278,10 @@ func (pluginInput *PluginInput) doPluginTest(pluginName string) (output Output) 
 
 	inputBase64 := base64.StdEncoding.EncodeToString(pluginInputJson)
 
+	timeBeforeExec := time.Now()
 	pluginOutput, err := exec.Command(pluginName, inputBase64).CombinedOutput()
+	timeAfterExec := time.Now()
+	execDuration := timeAfterExec.Sub(timeBeforeExec)
 	if err != nil {
 		output.print("result", "error")
 		output.print("error", fmt.Sprint(err))
@@ -308,6 +312,8 @@ func (pluginInput *PluginInput) doPluginTest(pluginName string) (output Output) 
 		output.print("description", "error processing the output of the plugin (into an interface)")
 		return
 	}
+
+	output.print("time", fmt.Sprint(execDuration))
 
 	path, errr := wattsSchemes[wattsVersion][*pluginTestAction].Validate(pluginOutputInterface)
 	if errr != nil {
