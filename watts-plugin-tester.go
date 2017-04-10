@@ -271,21 +271,25 @@ func (p *PluginInput) specifyPluginInput(path string) {
 	return
 }
 
-func (p *PluginInput) doPluginTest(pluginName string) (output Output) {
-	output = Output{}
-
-	var wattsVersion string
+func (p *PluginInput) version() (version string) {
 	rv := (*p)["watts_version"]
 	v, err := json.Marshal(&rv)
 	if err == nil {
-		wattsVersion = string(bytes.Replace(v, []byte{'"'}, []byte{}, -1))
-		if _, versionFound := wattsSchemes[wattsVersion]; !versionFound {
-			wattsVersion = string(bytes.Replace(defaultWattsVersion, []byte{'"'}, []byte{}, -1))
+		version = string(bytes.Replace(v, []byte{'"'}, []byte{}, -1))
+		if _, versionFound := wattsSchemes[version]; !versionFound {
+			version = string(bytes.Replace(defaultWattsVersion, []byte{'"'}, []byte{}, -1))
 		}
 	} else {
 		app.Errorf("%s", err)
 		os.Exit(exitCodeInternalError)
 	}
+	return
+}
+
+func (p *PluginInput) doPluginTest(pluginName string) (output Output) {
+	output = Output{}
+
+	wattsVersion := p.version()
 
 	pluginInputJson := p.marshalPluginInput()
 
