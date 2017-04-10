@@ -25,7 +25,7 @@ var (
 	app                 = kingpin.New("watts-plugin-tester", "Test tool for watts plugins")
 	pluginTestAction    = app.Flag("plugin-action", "The plugin action to be tested. Defaults to \"parameter\"").Default("parameter").Short('a').String()
 	printVersion        = app.Command("version", "Print the version information")
-	pluginInputOverride = app.Flag("json", "Use user provided json to override the inbuilt one").Short('j').String()
+	pluginInputOverride = app.Flag("json", "Use an user provided json file to override the default one").Short('j').String()
 	//verbose = app.Flag("verbose", "Be verbose").Short('v').Bool()
 	machineReadable = app.Flag("machine", "Be machine readable (all output will be json)").Short('m').Bool()
 
