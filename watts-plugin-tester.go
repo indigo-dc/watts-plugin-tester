@@ -12,6 +12,7 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
+	"regexp"
 	"time"
 )
 
@@ -271,21 +272,30 @@ func (p *PluginInput) specifyPluginInput(path string) {
 	return
 }
 
-func (p *PluginInput) doPluginTest(pluginName string) (output Output) {
-	output = Output{}
-
-	var wattsVersion string
-	rv := (*p)["watts_version"]
-	v, err := json.Marshal(&rv)
-	if err == nil {
-		wattsVersion = string(bytes.Replace(v, []byte{'"'}, []byte{}, -1))
-		if _, versionFound := wattsSchemes[wattsVersion]; !versionFound {
-			wattsVersion = string(bytes.Replace(defaultWattsVersion, []byte{'"'}, []byte{}, -1))
-		}
-	} else {
+func (p *PluginInput) version() (version string) {
+	versionJson := (*p)["watts_version"]
+	versionBytes, err := json.Marshal(&versionJson)
+	if err != nil {
 		app.Errorf("%s", err)
 		os.Exit(exitCodeInternalError)
 	}
+
+	versionExtractor, _ := regexp.Compile("[^\"+]+")
+	extractedVersion := versionExtractor.Find(versionBytes)
+
+	if _, versionFound := wattsSchemes[string(extractedVersion)]; !versionFound {
+		extractedVersion = versionExtractor.Find(defaultWattsVersion)
+		(*p)["watts_version"] = &defaultWattsVersion
+	}
+
+	version = string(extractedVersion)
+	return
+}
+
+func (p *PluginInput) doPluginTest(pluginName string) (output Output) {
+	output = Output{}
+
+	wattsVersion := p.version()
 
 	pluginInputJson := p.marshalPluginInput()
 
