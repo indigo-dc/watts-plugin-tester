@@ -29,8 +29,9 @@ setup_plugin() {
 
     [[ $CONFIG_INIT_CMD == null ]] && CONFIG_INIT_CMD=
     [[ $CONFIG_TEST_DIR == null ]] && CONFIG_TEST_DIR='test'
-    [[ $CONFIG_EXEC_FILE == null ]] && \
-        echo '==> Invalid configuration in test/config_json: exec_file unset' >&2 && exit 1
+    if [[ $CONFIG_EXEC == null ]]
+    then echo '==> Invalid configuration in test/config_json: exec_file unset' >&2 && exit 1
+    fi
 }
 
 setup_plugin_tester() {
