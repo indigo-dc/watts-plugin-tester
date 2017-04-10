@@ -3,6 +3,8 @@
 *.a
 *.so
 
+idh.json
+ssh_idh.py
 # Folders
 _obj
 _test
