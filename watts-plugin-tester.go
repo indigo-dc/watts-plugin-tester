@@ -12,6 +12,7 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
+	"regexp"
 	"time"
 )
 
@@ -272,17 +273,22 @@ func (p *PluginInput) specifyPluginInput(path string) {
 }
 
 func (p *PluginInput) version() (version string) {
-	rv := (*p)["watts_version"]
-	v, err := json.Marshal(&rv)
-	if err == nil {
-		version = string(bytes.Replace(v, []byte{'"'}, []byte{}, -1))
-		if _, versionFound := wattsSchemes[version]; !versionFound {
-			version = string(bytes.Replace(defaultWattsVersion, []byte{'"'}, []byte{}, -1))
-		}
-	} else {
+	versionJson := (*p)["watts_version"]
+	versionBytes, err := json.Marshal(&versionJson)
+	if err != nil {
 		app.Errorf("%s", err)
 		os.Exit(exitCodeInternalError)
 	}
+
+	versionExtractor, _ := regexp.Compile("[^\"+]+")
+	extractedVersion := versionExtractor.Find(versionBytes)
+
+	if _, versionFound := wattsSchemes[string(extractedVersion)]; !versionFound {
+		extractedVersion = versionExtractor.Find(defaultWattsVersion)
+		(*p)["watts_version"] = &defaultWattsVersion
+	}
+
+	version = string(extractedVersion)
 	return
 }
 
