@@ -15,7 +15,7 @@
   "copyrights": [
     {
       "files": "*",
-      "copyright": "2017 Bas Wegh @ KIT within the INDIGO DataCloud Project",
+      "copyright": "2017 Lukas Burgey @ KIT within the INDIGO DataCloud Project",
       "license": "Apache 2.0",
       "file": "LICENSE"
     }

@@ -409,7 +409,7 @@ func byteToRawMessage(inputBytes []byte) (rawMessage json.RawMessage) {
 * all plugin input generation shall take place here
  */
 func main() {
-	app.Author("Lukas Burgey / indigo-dc")
+	app.Author("Lukas Burgey @ KIT within the INDIGO DataCloud Project")
 	app.Version("0.1.7")
 
 	switch kingpin.MustParse(app.Parse(os.Args[1:])) {
