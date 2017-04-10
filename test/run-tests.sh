@@ -24,11 +24,13 @@ setup_plugin() {
     CONFIG=$(cat test/config.json | jq -cM .)
 
     CONFIG_INIT_CMD=$(echo $CONFIG | jq -r '.init_cmd')
-    CONFIG_EXEC=$(echo $CONFIG | jq -r '.run_cmd')
+    CONFIG_EXEC=$(echo $CONFIG | jq -r '.exec_file')
     CONFIG_TEST_DIR=$(echo $CONFIG | jq -r '.test_dir')
 
     [[ $CONFIG_INIT_CMD == null ]] && CONFIG_INIT_CMD=
     [[ $CONFIG_TEST_DIR == null ]] && CONFIG_TEST_DIR='test'
+    [[ $CONFIG_EXEC_FILE == null ]] && \
+        echo '==> Invalid configuration in test/config_json: exec_file unset' >&2 && exit 1
 }
 
 setup_plugin_tester() {

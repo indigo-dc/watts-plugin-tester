@@ -14,11 +14,11 @@ Workflow
 ```js
 {
     "init_cmd": null,
-    "run_cmd": <required>,
+    "exec_file": <required>,
     "test_dir": "test"
 }
 ```
 - Search for input files of the form `<test_dir>/{parameter,request,revoke}_*_{pass,fail}.json`
 - Run `<init_cmd>` if not `null`
-- Run `<run_cmd>` for each input file
+- Run `<exec_file>` for each input file
 - Report results
