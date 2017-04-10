@@ -104,7 +104,6 @@ var (
 		v.ObjKV("params", schemeParams),
 		v.ObjKV("user_info", schemeUserInfo),
 	)
-
 	wattsSchemes = map[string](map[string]v.Validator){
 		"1.0.0": map[string]v.Validator{
 			"parameter": v.Object(
@@ -254,11 +253,11 @@ func (p *PluginInput) specifyPluginInput(path string) {
 	return
 }
 
-func (pluginInput *PluginInput) doPluginTest(pluginName string) (output Output) {
+func (p *PluginInput) doPluginTest(pluginName string) (output Output) {
 	output = Output{}
 
 	var wattsVersion string
-	rv := (*pluginInput)["watts_version"]
+	rv := (*p)["watts_version"]
 	v, err := json.Marshal(&rv)
 	if err == nil {
 		wattsVersion = string(bytes.Replace(v, []byte{'"'}, []byte{}, -1))
@@ -270,7 +269,7 @@ func (pluginInput *PluginInput) doPluginTest(pluginName string) (output Output) 
 		os.Exit(1)
 	}
 
-	pluginInputJson := pluginInput.marshalPluginInput()
+	pluginInputJson := p.marshalPluginInput()
 
 	output.print("plugin_name", pluginName)
 	output.print("action", *pluginTestAction)
