@@ -20,13 +20,15 @@ type PluginInput map[string](*json.RawMessage)
 type Output map[string](*json.RawMessage)
 
 var (
-	version = "0.1.7"
+	exitCode = 0
+	exitCodePluginError = 1
+	exitCodePluginExecutionError = 2
+	exitCodeInternalError = 3
+	exitCodeUserError = 4
 
 	app                 = kingpin.New("watts-plugin-tester", "Test tool for watts plugins")
 	pluginTestAction    = app.Flag("plugin-action", "The plugin action to be tested. Defaults to \"parameter\"").Default("parameter").Short('a').String()
-	printVersion        = app.Command("version", "Print the version information")
 	pluginInputOverride = app.Flag("json", "Use an user provided json file to override the default one").Short('j').String()
-	//verbose = app.Flag("verbose", "Be verbose").Short('v').Bool()
 	machineReadable = app.Flag("machine", "Be machine readable (all output will be json)").Short('m').Bool()
 
 	pluginTest     = app.Command("test", "Test a plugin")
@@ -169,7 +171,6 @@ func validateRequestScheme(data interface{}) (path string, err error) {
 	return schemesRequest[resultValue].Validate(data)
 }
 
-
 func (p *PluginInput) validate() {
 	var er error
 	var bs []byte
@@ -177,22 +178,21 @@ func (p *PluginInput) validate() {
 
 	bs, er = json.MarshalIndent(p, outputIndentation, outputTabWidth)
 	if er != nil {
-		//TODO rework output
-		fmt.Printf("--- plugin input:\n%s\n", *p)
-		fmt.Printf("--- bytes:\n%s\n", bs)
-		fmt.Printf("---error marshaling:\n%s\n", er)
-		os.Exit(1)
+		app.Errorf("plugin input:\n%s\n", *p)
+		app.Errorf("bytes:\n%s\n", bs)
+		app.Errorf("error marshaling:\n%s\n", er)
+		os.Exit(exitCodeInternalError)
 	}
 
 	json.Unmarshal(bs, &i)
 	path, err := pluginInputScheme.Validate(i)
 
 	if err != nil {
-		fmt.Printf("Unable to validate plugin input\n")
-		fmt.Printf("%s: %s\n", "Plugin Input", bs)
-		fmt.Printf("%s: %s\n", "Error", err)
-		fmt.Printf("%s: %s\n", "Path", path)
-		os.Exit(1)
+		app.Errorf("Unable to validate plugin input\n")
+		app.Errorf("%s: %s\n", "Plugin Input", bs)
+		app.Errorf("%s: %s\n", "Error", err)
+		app.Errorf("%s: %s\n", "Path", path)
+		os.Exit(exitCodePluginError)
 	} else {
 		if *validateSpecific || *validateDefault {
 			fmt.Printf("Plugin input validation passed\n")
@@ -211,8 +211,8 @@ func (p *PluginInput) generateUserID() {
 
 	err := json.Unmarshal(userInfo, &userIdJson)
 	if err != nil {
-		fmt.Printf("Error unmarshaling watts_userid: %s\n", err)
-		os.Exit(1)
+		app.Errorf("Error unmarshaling watts_userid: %s\n", err)
+		os.Exit(exitCodeInternalError)
 	}
 
 	//fmt.Printf("uid:%s\n", userIdJson)
@@ -235,8 +235,8 @@ func (p *PluginInput) marshalPluginInput() (s []byte) {
 
 	s, err = json.MarshalIndent(*p, outputIndentation, outputTabWidth)
 	if err != nil {
-		fmt.Printf("Unable to marshal: Error (%s)\n%s\n", err, s)
-		os.Exit(1)
+		app.Errorf("Unable to marshal: Error (%s)\n%s\n", err, s)
+		os.Exit(exitCodeInternalError)
 	}
 	return
 }
@@ -250,21 +250,21 @@ func (p *PluginInput) specifyPluginInput(path string) {
 
 	overrideBytes, err := ioutil.ReadFile(*pluginInputOverride)
 	if err != nil {
-		fmt.Println("Error reading user provided file ", *pluginInputOverride, " (", err, ")")
-		os.Exit(1)
+		app.Errorf("Error reading user provided file ", *pluginInputOverride, " (", err, ")")
+		os.Exit(exitCodeUserError)
 	}
 
 	overridePluginInput := PluginInput{}
 	err = json.Unmarshal(overrideBytes, &overridePluginInput)
 	if err != nil {
-		fmt.Println("Error unmarshaling user provided json: ", *pluginInputOverride, " (", err, ")")
-		os.Exit(1)
+		app.Errorf("Error unmarshaling user provided json: ", *pluginInputOverride, " (", err, ")")
+		os.Exit(exitCodeUserError)
 	}
 
 	err = mergo.Merge(&overridePluginInput, p)
 	if err != nil {
-		fmt.Println("Error merging: (", err, ")")
-		os.Exit(1)
+		app.Errorf("Error merging: (", err, ")")
+		os.Exit(exitCodeInternalError)
 	}
 
 	*p = overridePluginInput
@@ -283,8 +283,8 @@ func (p *PluginInput) doPluginTest(pluginName string) (output Output) {
 			wattsVersion = string(bytes.Replace(defaultWattsVersion, []byte{'"'}, []byte{}, -1))
 		}
 	} else {
-		fmt.Printf("error %s\n", err)
-		os.Exit(1)
+		app.Errorf("%s", err)
+		os.Exit(exitCodeInternalError)
 	}
 
 	pluginInputJson := p.marshalPluginInput()
@@ -303,6 +303,7 @@ func (p *PluginInput) doPluginTest(pluginName string) (output Output) {
 		output.print("result", "error")
 		output.print("error", fmt.Sprint(err))
 		output.print("description", "error executing the plugin")
+		exitCode = 3
 		return
 	}
 
@@ -327,6 +328,7 @@ func (p *PluginInput) doPluginTest(pluginName string) (output Output) {
 		output.print("result", "error")
 		output.print("error", fmt.Sprintf("%s", err))
 		output.print("description", "error processing the output of the plugin (into an interface)")
+		exitCode = 1
 		return
 	}
 
@@ -336,6 +338,7 @@ func (p *PluginInput) doPluginTest(pluginName string) (output Output) {
 	if errr != nil {
 		output.print("result", "error")
 		output.print("description", fmt.Sprintf("Validation error at %s. Error (%s)", path, errr))
+		exitCode = 1
 		return
 	} else {
 		output.print("result", "ok")
@@ -406,6 +409,9 @@ func byteToRawMessage(inputBytes []byte) (rawMessage json.RawMessage) {
 * all plugin input generation shall take place here
  */
 func main() {
+	app.Author("Lukas Burgey / indigo-dc")
+	app.Version("0.1.7")
+
 	switch kingpin.MustParse(app.Parse(os.Args[1:])) {
 	case pluginTest.FullCommand():
 		defaultPluginInput.specifyPluginInput(*pluginInputOverride)
@@ -433,9 +439,7 @@ func main() {
 		}
 
 		fmt.Printf("%s", defaultPluginInput.marshalPluginInput())
-
-	case printVersion.FullCommand():
-		fmt.Printf("%s\n", version)
-
 	}
+
+	os.Exit(exitCode)
 }
