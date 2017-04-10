@@ -45,19 +45,22 @@ test_plugin() {
 }
 
 run_tests() {
-    action=$1
-
     trap 'rm -f found_at_least_one_input' EXIT
 
-    find plugin/test -name "${action}_*.json" \
+    find plugin/test -name "*_*_*.json" \
         | (while read input
            do
                keys=${input%.json}
-               keys=${keys#plugin/test/${action}_}
+               keys=${keys#plugin/test/}
+               action=${keys%%_*}
                name=${keys%_*}
+               name=${name#*_}
                expected_result=${keys##*_}
 
-               [[ $expected_result != fail && $expected_result != pass ]] && continue
+               echo "$input <=> $action _ $name _ $expected_result .json"
+
+               [[ $action =~ request|revoke|parameter ]] || continue
+               [[ $expected_result =~ fail|pass ]] || continue
                touch found_at_least_one_input
 
                echo '==>' "Running $action test $name with input '$input'"
@@ -83,7 +86,7 @@ run_tests() {
 
     if [[ ! -f found_at_least_one_input ]]
     then
-        echo '==>' "No input files found for $action tests"
+        echo '==>' "No input files found"
     fi
 }
 
@@ -91,7 +94,4 @@ run_tests() {
 
 setup_plugin_tester || exit
 setup_plugin || exit
-
-run_tests parameter || exit
-run_tests request || exit
-run_tests revoke || exit
+run_tests || exit
