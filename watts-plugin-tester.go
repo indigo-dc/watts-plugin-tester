@@ -30,6 +30,7 @@ var (
 	app                 = kingpin.New("watts-plugin-tester", "Test tool for watts plugins")
 	pluginTestAction    = app.Flag("plugin-action", "The plugin action to be tested. Defaults to \"parameter\"").Default("parameter").Short('a').String()
 	pluginInputOverride = app.Flag("json", "Use an user provided json file to override the default one").Short('j').String()
+	pluginInputConfOverride = app.Flag("config", "Use the config parameters from the provided watts config").Short('c').String()
 	machineReadable     = app.Flag("machine", "Be machine readable (all output will be json)").Short('m').Bool()
 
 	pluginTest     = app.Command("test", "Test a plugin")
@@ -242,10 +243,10 @@ func (p *PluginInput) marshalPluginInput() (s []byte) {
 	return
 }
 
-func (p *PluginInput) specifyPluginInput(path string) {
+func (p *PluginInput) specifyPluginInput() {
 	p = &defaultPluginInput
 
-	if path == "" {
+	if *pluginInputOverride == "" {
 		return
 	}
 
@@ -292,21 +293,21 @@ func (p *PluginInput) version() (version string) {
 	return
 }
 
-func (p *PluginInput) doPluginTest(pluginName string) (output Output) {
+func (p *PluginInput) doPluginTest() (output Output) {
 	output = Output{}
 
 	wattsVersion := p.version()
 
 	pluginInputJson := p.marshalPluginInput()
 
-	output.print("plugin_name", pluginName)
+	output.print("plugin_name", *pluginTestName)
 	output.print("action", *pluginTestAction)
 	output.printJson("input", json.RawMessage(pluginInputJson))
 
 	inputBase64 := base64.StdEncoding.EncodeToString(pluginInputJson)
 
 	timeBeforeExec := time.Now()
-	pluginOutput, err := exec.Command(pluginName, inputBase64).CombinedOutput()
+	pluginOutput, err := exec.Command(*pluginTestName, inputBase64).CombinedOutput()
 	timeAfterExec := time.Now()
 	execDuration := timeAfterExec.Sub(timeBeforeExec)
 	if err != nil {
@@ -424,7 +425,7 @@ func main() {
 
 	switch kingpin.MustParse(app.Parse(os.Args[1:])) {
 	case pluginTest.FullCommand():
-		defaultPluginInput.specifyPluginInput(*pluginInputOverride)
+		defaultPluginInput.specifyPluginInput()
 
 		defaultAction = json.RawMessage(fmt.Sprintf("\"%s\"", *pluginTestAction))
 		defaultPluginInput["action"] = &defaultAction
@@ -432,7 +433,7 @@ func main() {
 		defaultPluginInput.generateUserID()
 		defaultPluginInput.validate()
 
-		fmt.Printf("%s", defaultPluginInput.doPluginTest(*pluginTestName))
+		fmt.Printf("%s", defaultPluginInput.doPluginTest())
 
 	case printDefault.FullCommand():
 		if *validateDefault {
@@ -442,7 +443,7 @@ func main() {
 		fmt.Printf("%s", defaultPluginInput.marshalPluginInput())
 
 	case printSpecific.FullCommand():
-		defaultPluginInput.specifyPluginInput(*pluginInputOverride)
+		defaultPluginInput.specifyPluginInput()
 		defaultPluginInput.generateUserID()
 		if *validateSpecific {
 			defaultPluginInput.validate()
