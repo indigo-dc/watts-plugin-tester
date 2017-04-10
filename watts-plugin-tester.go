@@ -27,11 +27,12 @@ var (
 	exitCodeInternalError        = 3
 	exitCodeUserError            = 4
 
-	app                 = kingpin.New("watts-plugin-tester", "Test tool for watts plugins")
-	pluginTestAction    = app.Flag("plugin-action", "The plugin action to be tested. Defaults to \"parameter\"").Default("parameter").Short('a').String()
-	pluginInputOverride = app.Flag("json", "Use an user provided json file to override the default one").Short('j').String()
-	pluginInputConfOverride = app.Flag("config", "Use the config parameters from the provided watts config").Short('c').String()
-	machineReadable     = app.Flag("machine", "Be machine readable (all output will be json)").Short('m').Bool()
+	app                               = kingpin.New("watts-plugin-tester", "Test tool for watts plugins")
+	pluginTestAction                  = app.Flag("plugin-action", "The plugin action to be tested. Defaults to \"parameter\"").Default("parameter").Short('a').String()
+	pluginInputOverride               = app.Flag("json", "Use an user provided json file to override the default one").Short('j').String()
+	pluginInputConfOverride           = app.Flag("config", "Use the config parameters from the provided watts config. Specify the config-identifier!").Short('c').String()
+	pluginInputConfOverrideIdentifier = app.Flag("config-identifier", "Plugin identifier for identifying the plugin in the watts config").Short('i').String()
+	machineReadable                   = app.Flag("machine", "Be machine readable (all output will be json)").Short('m').Bool()
 
 	pluginTest     = app.Command("test", "Test a plugin")
 	pluginTestName = pluginTest.Arg("pluginName", "Name of the plugin to test").Required().String()
@@ -244,33 +245,62 @@ func (p *PluginInput) marshalPluginInput() (s []byte) {
 }
 
 func (p *PluginInput) specifyPluginInput() {
-	p = &defaultPluginInput
 
-	if *pluginInputOverride == "" {
+	// merge a user provided watts config
+	if *pluginInputConfOverride != "" {
+		if *pluginInputConfOverrideIdentifier != "" {
+			fileContent, err := ioutil.ReadFile(*pluginInputConfOverride)
+			if err != nil {
+				app.Errorf("Reading user provided file ", *pluginInputConfOverride, " failed (", err, ")")
+				os.Exit(exitCodeUserError)
+			}
+
+			regex := fmt.Sprintf("service.%s.plugin.(?P<key>.+) = (?P<value>.+)\n",
+				*pluginInputConfOverrideIdentifier)
+			configExtractor, _ := regexp.Compile(regex)
+			matches := configExtractor.FindAllSubmatch(fileContent, 10)
+
+			confParams := map[string]string{}
+			for i := 1; i < len(matches); i++ {
+				confParams[string(matches[i][1])] = string(matches[i][2])
+			}
+			b, err := json.Marshal(confParams)
+			if err != nil {
+				app.Errorf("Formatting conf parameters")
+				os.Exit(exitCodeInternalError)
+			}
+
+			defaultConfParams = json.RawMessage(b)
+		} else {
+			app.Errorf("Need a config identifier for config override")
+			os.Exit(exitCodeUserError)
+		}
+	}
+
+	// merge a user provided json file
+	if *pluginInputOverride != "" {
+		overrideBytes, err := ioutil.ReadFile(*pluginInputOverride)
+		if err != nil {
+			app.Errorf("Reading user provided file ", *pluginInputOverride, " (", err, ")")
+			os.Exit(exitCodeUserError)
+		}
+
+		overridePluginInput := PluginInput{}
+		err = json.Unmarshal(overrideBytes, &overridePluginInput)
+		if err != nil {
+			app.Errorf("Unmarshaling user provided json: ", *pluginInputOverride, " (", err, ")")
+			os.Exit(exitCodeUserError)
+		}
+
+		err = mergo.Merge(&overridePluginInput, p)
+		if err != nil {
+			app.Errorf("Merging: (", err, ")")
+			os.Exit(exitCodeInternalError)
+		}
+
+		*p = overridePluginInput
 		return
 	}
-
-	overrideBytes, err := ioutil.ReadFile(*pluginInputOverride)
-	if err != nil {
-		app.Errorf("Error reading user provided file ", *pluginInputOverride, " (", err, ")")
-		os.Exit(exitCodeUserError)
-	}
-
-	overridePluginInput := PluginInput{}
-	err = json.Unmarshal(overrideBytes, &overridePluginInput)
-	if err != nil {
-		app.Errorf("Error unmarshaling user provided json: ", *pluginInputOverride, " (", err, ")")
-		os.Exit(exitCodeUserError)
-	}
-
-	err = mergo.Merge(&overridePluginInput, p)
-	if err != nil {
-		app.Errorf("Error merging: (", err, ")")
-		os.Exit(exitCodeInternalError)
-	}
-
-	*p = overridePluginInput
-	return
 }
 
 func (p *PluginInput) version() (version string) {
