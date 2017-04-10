@@ -20,16 +20,16 @@ type PluginInput map[string](*json.RawMessage)
 type Output map[string](*json.RawMessage)
 
 var (
-	exitCode = 0
-	exitCodePluginError = 1
+	exitCode                     = 0
+	exitCodePluginError          = 1
 	exitCodePluginExecutionError = 2
-	exitCodeInternalError = 3
-	exitCodeUserError = 4
+	exitCodeInternalError        = 3
+	exitCodeUserError            = 4
 
 	app                 = kingpin.New("watts-plugin-tester", "Test tool for watts plugins")
 	pluginTestAction    = app.Flag("plugin-action", "The plugin action to be tested. Defaults to \"parameter\"").Default("parameter").Short('a').String()
 	pluginInputOverride = app.Flag("json", "Use an user provided json file to override the default one").Short('j').String()
-	machineReadable = app.Flag("machine", "Be machine readable (all output will be json)").Short('m').Bool()
+	machineReadable     = app.Flag("machine", "Be machine readable (all output will be json)").Short('m').Bool()
 
 	pluginTest     = app.Command("test", "Test a plugin")
 	pluginTestName = pluginTest.Arg("pluginName", "Name of the plugin to test").Required().String()
