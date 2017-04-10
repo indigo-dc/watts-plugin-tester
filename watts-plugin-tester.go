@@ -104,6 +104,29 @@ var (
 		v.ObjKV("params", schemeParams),
 		v.ObjKV("user_info", schemeUserInfo),
 	)
+	schemeRequestResultValue = v.Object(v.ObjKV("result", v.Or(
+		v.String(v.StrIs("error")),
+		v.String(v.StrIs("oidc_login")),
+		v.String(v.StrIs("ok")),
+	)))
+	schemesRequest = map[string]v.Validator{
+		"error": v.Object(
+			v.ObjKV("result", v.String(v.StrIs("error"))),
+			v.ObjKV("user_msg", v.String()),
+			v.ObjKV("log_msg", v.String()),
+		),
+		"oidc_login": v.Object(
+			v.ObjKV("result", v.String(v.StrIs("oidc_login"))),
+			v.ObjKV("provider", v.String()),
+			v.ObjKV("msg", v.String()),
+		),
+		"ok": v.Object(
+			v.ObjKV("result", v.String(v.StrIs("ok"))),
+			v.ObjKV("credential", v.Array(v.ArrEach(schemeCredential))),
+			v.ObjKV("state", v.String()),
+		),
+	}
+
 	wattsSchemes = map[string](map[string]v.Validator){
 		"1.0.0": map[string]v.Validator{
 			"parameter": v.Object(
@@ -120,23 +143,7 @@ var (
 					v.Array(v.ArrEach(schemeRequestParam)),
 				))),
 			),
-			"request": v.Or(
-				v.Object(
-					v.ObjKV("result", v.String(v.StrIs("error"))),
-					v.ObjKV("user_msg", v.String()),
-					v.ObjKV("log_msg", v.String()),
-				),
-				v.Object(
-					v.ObjKV("result", v.String(v.StrIs("oidc_login"))),
-					v.ObjKV("provider", v.String()),
-					v.ObjKV("msg", v.String()),
-				),
-				v.Object(
-					v.ObjKV("result", v.String(v.StrIs("ok"))),
-					v.ObjKV("credential", v.Array(v.ArrEach(schemeCredential))),
-					v.ObjKV("state", v.String()),
-				),
-			),
+			"request": v.Function(validateRequestScheme),
 			"revoke": v.Or(
 				v.Object(
 					v.ObjKV("result", v.String(v.StrIs("error"))),
@@ -151,6 +158,17 @@ var (
 
 	}
 )
+
+func validateRequestScheme(data interface{}) (path string, err error) {
+	path, err = schemeRequestResultValue.Validate(data)
+	if err != nil {
+		return
+	}
+
+	resultValue := data.(map[string]interface{})["result"].(string)
+	return schemesRequest[resultValue].Validate(data)
+}
+
 
 func (p *PluginInput) validate() {
 	var er error
