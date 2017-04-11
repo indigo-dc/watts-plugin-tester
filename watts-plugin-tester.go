@@ -436,7 +436,7 @@ func byteToRawMessage(inputBytes []byte) (rawMessage json.RawMessage) {
  */
 func main() {
 	app.Author("Lukas Burgey @ KIT within the INDIGO DataCloud Project")
-	app.Version("0.1.7")
+	app.Version("0.2.0")
 
 	switch kingpin.MustParse(app.Parse(os.Args[1:])) {
 	case pluginTest.FullCommand():
