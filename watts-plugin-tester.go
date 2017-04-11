@@ -188,6 +188,13 @@ func validateRequestScheme(data interface{}) (path string, err error) {
 	return schemesRequest[resultValue].Validate(data)
 }
 
+func validatePluginAction(action string) {
+	if action != "request" && action != "parameter" && action != "revoke" {
+		app.Errorf("invalid plugin action %s", action)
+		os.Exit(exitCodeUserError)
+	}
+}
+
 func (p *PluginInput) validate() {
 	var bs []byte
 	var i interface{}
@@ -445,8 +452,9 @@ func main() {
 
 	switch kingpin.MustParse(app.Parse(os.Args[1:])) {
 	case pluginTest.FullCommand():
-		defaultPluginInput.specifyPluginInput()
+		validatePluginAction(*pluginTestAction)
 
+		defaultPluginInput.specifyPluginInput()
 		defaultAction = toRawJsonString(*pluginTestAction)
 		defaultPluginInput["action"] = &defaultAction
 
