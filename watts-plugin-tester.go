@@ -164,6 +164,18 @@ var (
 	}
 )
 
+func check(err error, exitCode int, msg string) {
+	if err != nil {
+		if msg != "" {
+			app.Errorf("%s - %s", err, msg)
+		} else {
+			app.Errorf("%s", err)
+		}
+		os.Exit(exitCode)
+	}
+	return
+}
+
 func validateRequestScheme(data interface{}) (path string, err error) {
 	path, err = schemeRequestResultValue.Validate(data)
 	if err != nil {
@@ -175,26 +187,20 @@ func validateRequestScheme(data interface{}) (path string, err error) {
 }
 
 func (p *PluginInput) validate() {
-	var er error
 	var bs []byte
 	var i interface{}
 
-	bs, er = json.MarshalIndent(p, outputIndentation, outputTabWidth)
-	if er != nil {
-		app.Errorf("plugin input:\n%s\n", *p)
-		app.Errorf("bytes:\n%s\n", bs)
-		app.Errorf("error marshaling:\n%s\n", er)
-		os.Exit(exitCodeInternalError)
-	}
+	bs, err := json.MarshalIndent(p, outputIndentation, outputTabWidth)
+	check(err, exitCodeInternalError, "marshal error")
 
 	json.Unmarshal(bs, &i)
 	path, err := pluginInputScheme.Validate(i)
 
 	if err != nil {
-		app.Errorf("Unable to validate plugin input\n")
-		app.Errorf("%s: %s\n", "Plugin Input", bs)
-		app.Errorf("%s: %s\n", "Error", err)
-		app.Errorf("%s: %s\n", "Path", path)
+		app.Errorf("Unable to validate plugin input")
+		fmt.Sprintf("%s: %s\n", "Plugin Input", bs)
+		fmt.Sprintf("%s: %s\n", "Error", err)
+		fmt.Sprintf("%s: %s\n", "Path", path)
 		os.Exit(exitCodePluginError)
 	} else {
 		if *validateSpecific || *validateDefault {
@@ -210,21 +216,15 @@ func (p *PluginInput) generateUserID() {
 	userIdJsonReduced := map[string](*json.RawMessage){}
 
 	userInfo := *(*p)["user_info"]
-	//fmt.Printf("user_info: %s\n", userInfo)
 
 	err := json.Unmarshal(userInfo, &userIdJson)
-	if err != nil {
-		app.Errorf("Error unmarshaling watts_userid: %s\n", err)
-		os.Exit(exitCodeInternalError)
-	}
-
-	//fmt.Printf("uid:%s\n", userIdJson)
+	check(err, exitCodeInternalError, "Error unmarshaling watts_userid")
 
 	userIdJsonReduced["issuer"] = userIdJson["iss"]
 	userIdJsonReduced["subject"] = userIdJson["sub"]
 
 	j, err := json.Marshal(userIdJsonReduced)
-	//fmt.Printf("reduced uid:%s\n", j)
+	check(err, exitCodeInternalError, "")
 
 	escaped := bytes.Replace(j, []byte{'/'}, []byte{'\\', '/'}, -1)
 	st := fmt.Sprintf("\"%s\"", base64url.Encode(escaped))
@@ -234,13 +234,8 @@ func (p *PluginInput) generateUserID() {
 }
 
 func (p *PluginInput) marshalPluginInput() (s []byte) {
-	var err error
-
-	s, err = json.MarshalIndent(*p, outputIndentation, outputTabWidth)
-	if err != nil {
-		app.Errorf("Unable to marshal: Error (%s)\n%s\n", err, s)
-		os.Exit(exitCodeInternalError)
-	}
+	s, err := json.MarshalIndent(*p, outputIndentation, outputTabWidth)
+	check(err, exitCodeInternalError, fmt.Sprintf("unable to marshal '%s'", s))
 	return
 }
 
@@ -250,10 +245,7 @@ func (p *PluginInput) specifyPluginInput() {
 	if *pluginInputConfOverride != "" {
 		if *pluginInputConfOverrideIdentifier != "" {
 			fileContent, err := ioutil.ReadFile(*pluginInputConfOverride)
-			if err != nil {
-				app.Errorf("Reading user provided file ", *pluginInputConfOverride, " failed (", err, ")")
-				os.Exit(exitCodeUserError)
-			}
+			check(err, exitCodeUserError, "")
 
 			regex := fmt.Sprintf("service.%s.plugin.(?P<key>.+) = (?P<value>.+)\n",
 				*pluginInputConfOverrideIdentifier)
@@ -265,10 +257,7 @@ func (p *PluginInput) specifyPluginInput() {
 				confParams[string(matches[i][1])] = string(matches[i][2])
 			}
 			b, err := json.Marshal(confParams)
-			if err != nil {
-				app.Errorf("Formatting conf parameters")
-				os.Exit(exitCodeInternalError)
-			}
+			check(err, exitCodeInternalError, "Formatting conf parameters")
 
 			defaultConfParams = json.RawMessage(b)
 		} else {
@@ -280,23 +269,14 @@ func (p *PluginInput) specifyPluginInput() {
 	// merge a user provided json file
 	if *pluginInputOverride != "" {
 		overrideBytes, err := ioutil.ReadFile(*pluginInputOverride)
-		if err != nil {
-			app.Errorf("Reading user provided file ", *pluginInputOverride, " (", err, ")")
-			os.Exit(exitCodeUserError)
-		}
+		check(err, exitCodeUserError, "")
 
 		overridePluginInput := PluginInput{}
 		err = json.Unmarshal(overrideBytes, &overridePluginInput)
-		if err != nil {
-			app.Errorf("Unmarshaling user provided json: ", *pluginInputOverride, " (", err, ")")
-			os.Exit(exitCodeUserError)
-		}
+		check(err, exitCodeUserError, "on unmarshaling user provided json")
 
 		err = mergo.Merge(&overridePluginInput, p)
-		if err != nil {
-			app.Errorf("Merging: (", err, ")")
-			os.Exit(exitCodeInternalError)
-		}
+		check(err, exitCodeInternalError, "on merging user provided json")
 
 		*p = overridePluginInput
 		return
@@ -306,10 +286,7 @@ func (p *PluginInput) specifyPluginInput() {
 func (p *PluginInput) version() (version string) {
 	versionJson := (*p)["watts_version"]
 	versionBytes, err := json.Marshal(&versionJson)
-	if err != nil {
-		app.Errorf("%s", err)
-		os.Exit(exitCodeInternalError)
-	}
+	check(err, exitCodeInternalError, "")
 
 	versionExtractor, _ := regexp.Compile("[^\"+]+")
 	extractedVersion := versionExtractor.Find(versionBytes)
@@ -349,19 +326,6 @@ func (p *PluginInput) doPluginTest() (output Output) {
 	}
 
 	output.printJson("output", byteToRawMessage(pluginOutput))
-	//fmt.Printf("pluginOutput: %s\n", pluginOutput)
-
-	/*
-		pluginOutputJson := json.RawMessage(``)
-		err = json.Unmarshal(pluginOutput, &pluginOutputJson)
-		if err != nil {
-			output.print("output", string(pluginOutput))
-		} else {
-			output.printJson("output", pluginOutputJson)
-		}
-
-		fmt.Printf("Output: %s\n", output)
-	*/
 
 	var pluginOutputInterface interface{}
 	err = json.Unmarshal(pluginOutput, &pluginOutputInterface)
@@ -375,10 +339,10 @@ func (p *PluginInput) doPluginTest() (output Output) {
 
 	output.print("time", fmt.Sprint(execDuration))
 
-	path, errr := wattsSchemes[wattsVersion][*pluginTestAction].Validate(pluginOutputInterface)
-	if errr != nil {
+	path, err := wattsSchemes[wattsVersion][*pluginTestAction].Validate(pluginOutputInterface)
+	if err != nil {
 		output.print("result", "error")
-		output.print("description", fmt.Sprintf("Validation error at %s. Error (%s)", path, errr))
+		output.print("description", fmt.Sprintf("Validation error at %s. Error (%s)", path, err))
 		exitCode = 1
 		return
 	} else {
