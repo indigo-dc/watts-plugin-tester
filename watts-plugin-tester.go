@@ -33,6 +33,8 @@ var (
 	pluginInputConfOverride           = app.Flag("config", "Use the config parameters from the provided watts config. Specify the config-identifier!").Short('c').String()
 	pluginInputConfOverrideIdentifier = app.Flag("config-identifier", "Plugin identifier for identifying the plugin in the watts config").Short('i').String()
 	machineReadable                   = app.Flag("machine", "Be machine readable (all output will be json)").Short('m').Bool()
+	useEnvForParameterPass = app.Flag("env", "Use this environment variable to pass the plugin input to the plugin").Short('e').Bool()
+	envVarForParameterPass = app.Flag("env-var", "This environment variable is used to pass the plugin input to the plugin. Defaults to WATTS_PARAMETER").Default("WATTS_PARAMETER").String()
 
 	pluginTest     = app.Command("test", "Test a plugin")
 	pluginTestName = pluginTest.Arg("pluginName", "Name of the plugin to test").Required().String()
@@ -323,10 +325,19 @@ func (p *PluginInput) doPluginTest() (output Output) {
 
 	inputBase64 := base64.StdEncoding.EncodeToString(pluginInputJson)
 
+	var cmd *exec.Cmd
+	if *useEnvForParameterPass {
+		cmd = exec.Command(*pluginTestName)
+		cmd.Env = []string{fmt.Sprintf("%s=%s", *envVarForParameterPass, inputBase64)}
+	} else {
+		cmd = exec.Command(*pluginTestName, inputBase64)
+	}
+
 	timeBeforeExec := time.Now()
-	pluginOutput, err := exec.Command(*pluginTestName, inputBase64).CombinedOutput()
+	pluginOutput, err := cmd.CombinedOutput()
 	timeAfterExec := time.Now()
 	execDuration := timeAfterExec.Sub(timeBeforeExec)
+
 	if err != nil {
 		output.print("result", "error")
 		output.print("error", fmt.Sprint(err))
