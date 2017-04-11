@@ -229,8 +229,7 @@ func (p *PluginInput) generateUserID() {
 	check(err, exitCodeInternalError, "")
 
 	escaped := bytes.Replace(j, []byte{'/'}, []byte{'\\', '/'}, -1)
-	st := fmt.Sprintf("\"%s\"", base64url.Encode(escaped))
-	defaultWattsUserId = json.RawMessage(st)
+	defaultWattsUserId = toRawJsonString(base64url.Encode(escaped))
 	(*p)["watts_userid"] = &defaultWattsUserId
 	return
 }
@@ -394,7 +393,7 @@ func (o *Output) print(a string, b string) {
 		return
 	}
 
-	m := json.RawMessage(fmt.Sprintf("\"%s\"", b))
+	m := toRawJsonString(b)
 	outputMessages = append(outputMessages, m)
 	(*o)[a] = &(outputMessages[len(outputMessages)-1])
 }
@@ -417,7 +416,7 @@ func byteToRawMessage(inputBytes []byte) (rawMessage json.RawMessage) {
 	err := json.Unmarshal(inputBytes, &testJsonObject)
 	if err != nil {
 		os.Stderr.WriteString(fmt.Sprintf("got invalid json: '%s'\n", string(inputBytes)))
-		rawMessage = json.RawMessage(fmt.Sprintf("\"%s\"", "got erroneous output"))
+		rawMessage = toRawJsonString("got erroneous output")
 	} else {
 		jsonObject := json.RawMessage(``)
 		errr := json.Unmarshal(inputBytes, &jsonObject)
@@ -431,6 +430,12 @@ func byteToRawMessage(inputBytes []byte) (rawMessage json.RawMessage) {
 	return
 }
 
+func toRawJsonString(str string) (jo json.RawMessage) {
+	jo = json.RawMessage(fmt.Sprintf("\"%s\"", str))
+	return
+}
+
+
 /*
 * all plugin input generation shall take place here
  */
@@ -442,7 +447,7 @@ func main() {
 	case pluginTest.FullCommand():
 		defaultPluginInput.specifyPluginInput()
 
-		defaultAction = json.RawMessage(fmt.Sprintf("\"%s\"", *pluginTestAction))
+		defaultAction = toRawJsonString(*pluginTestAction)
 		defaultPluginInput["action"] = &defaultAction
 
 		defaultPluginInput.generateUserID()
