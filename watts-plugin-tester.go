@@ -12,6 +12,7 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
+	"regexp"
 	"time"
 )
 
@@ -20,14 +21,20 @@ type PluginInput map[string](*json.RawMessage)
 type Output map[string](*json.RawMessage)
 
 var (
-	version = "0.1.7"
+	exitCode                     = 0
+	exitCodePluginError          = 1
+	exitCodePluginExecutionError = 2
+	exitCodeInternalError        = 3
+	exitCodeUserError            = 4
 
-	app                 = kingpin.New("watts-plugin-tester", "Test tool for watts plugins")
-	pluginTestAction    = app.Flag("plugin-action", "The plugin action to be tested. Defaults to \"parameter\"").Default("parameter").Short('a').String()
-	printVersion        = app.Command("version", "Print the version information")
-	pluginInputOverride = app.Flag("json", "Use user provided json to override the inbuilt one").Short('j').String()
-	//verbose = app.Flag("verbose", "Be verbose").Short('v').Bool()
-	machineReadable = app.Flag("machine", "Be machine readable (all output will be json)").Short('m').Bool()
+	app                               = kingpin.New("watts-plugin-tester", "Test tool for watts plugins")
+	pluginTestAction                  = app.Flag("plugin-action", "The plugin action to be tested. Defaults to \"parameter\"").Default("parameter").Short('a').String()
+	pluginInputOverride               = app.Flag("json", "Use an user provided json file to override the default one").Short('j').String()
+	pluginInputConfOverride           = app.Flag("config", "Use the config parameters from the provided watts config. Specify the config-identifier!").Short('c').String()
+	pluginInputConfOverrideIdentifier = app.Flag("config-identifier", "Plugin identifier for identifying the plugin in the watts config").Short('i').String()
+	machineReadable                   = app.Flag("machine", "Be machine readable (all output will be json)").Short('m').Bool()
+	useEnvForParameterPass = app.Flag("env", "Use this environment variable to pass the plugin input to the plugin").Short('e').Bool()
+	envVarForParameterPass = app.Flag("env-var", "This environment variable is used to pass the plugin input to the plugin. Defaults to WATTS_PARAMETER").Default("WATTS_PARAMETER").String()
 
 	pluginTest     = app.Command("test", "Test a plugin")
 	pluginTestName = pluginTest.Arg("pluginName", "Name of the plugin to test").Required().String()
@@ -104,6 +111,28 @@ var (
 		v.ObjKV("params", schemeParams),
 		v.ObjKV("user_info", schemeUserInfo),
 	)
+	schemeRequestResultValue = v.Object(v.ObjKV("result", v.Or(
+		v.String(v.StrIs("error")),
+		v.String(v.StrIs("oidc_login")),
+		v.String(v.StrIs("ok")),
+	)))
+	schemesRequest = map[string]v.Validator{
+		"error": v.Object(
+			v.ObjKV("result", v.String(v.StrIs("error"))),
+			v.ObjKV("user_msg", v.String()),
+			v.ObjKV("log_msg", v.String()),
+		),
+		"oidc_login": v.Object(
+			v.ObjKV("result", v.String(v.StrIs("oidc_login"))),
+			v.ObjKV("provider", v.String()),
+			v.ObjKV("msg", v.String()),
+		),
+		"ok": v.Object(
+			v.ObjKV("result", v.String(v.StrIs("ok"))),
+			v.ObjKV("credential", v.Array(v.ArrEach(schemeCredential))),
+			v.ObjKV("state", v.String()),
+		),
+	}
 
 	wattsSchemes = map[string](map[string]v.Validator){
 		"1.0.0": map[string]v.Validator{
@@ -121,23 +150,7 @@ var (
 					v.Array(v.ArrEach(schemeRequestParam)),
 				))),
 			),
-			"request": v.Or(
-				v.Object(
-					v.ObjKV("result", v.String(v.StrIs("error"))),
-					v.ObjKV("user_msg", v.String()),
-					v.ObjKV("log_msg", v.String()),
-				),
-				v.Object(
-					v.ObjKV("result", v.String(v.StrIs("oidc_login"))),
-					v.ObjKV("provider", v.String()),
-					v.ObjKV("msg", v.String()),
-				),
-				v.Object(
-					v.ObjKV("result", v.String(v.StrIs("ok"))),
-					v.ObjKV("credential", v.Array(v.ArrEach(schemeCredential))),
-					v.ObjKV("state", v.String()),
-				),
-			),
+			"request": v.Function(validateRequestScheme),
 			"revoke": v.Or(
 				v.Object(
 					v.ObjKV("result", v.String(v.StrIs("error"))),
@@ -153,29 +166,44 @@ var (
 	}
 )
 
+func check(err error, exitCode int, msg string) {
+	if err != nil {
+		if msg != "" {
+			app.Errorf("%s - %s", err, msg)
+		} else {
+			app.Errorf("%s", err)
+		}
+		os.Exit(exitCode)
+	}
+	return
+}
+
+func validateRequestScheme(data interface{}) (path string, err error) {
+	path, err = schemeRequestResultValue.Validate(data)
+	if err != nil {
+		return
+	}
+
+	resultValue := data.(map[string]interface{})["result"].(string)
+	return schemesRequest[resultValue].Validate(data)
+}
+
 func (p *PluginInput) validate() {
-	var er error
 	var bs []byte
 	var i interface{}
 
-	bs, er = json.MarshalIndent(p, outputIndentation, outputTabWidth)
-	if er != nil {
-		//TODO rework output
-		fmt.Printf("--- plugin input:\n%s\n", *p)
-		fmt.Printf("--- bytes:\n%s\n", bs)
-		fmt.Printf("---error marshaling:\n%s\n", er)
-		os.Exit(1)
-	}
+	bs, err := json.MarshalIndent(p, outputIndentation, outputTabWidth)
+	check(err, exitCodeInternalError, "marshal error")
 
 	json.Unmarshal(bs, &i)
 	path, err := pluginInputScheme.Validate(i)
 
 	if err != nil {
-		fmt.Printf("Unable to validate plugin input\n")
-		fmt.Printf("%s: %s\n", "Plugin Input", bs)
-		fmt.Printf("%s: %s\n", "Error", err)
-		fmt.Printf("%s: %s\n", "Path", path)
-		os.Exit(1)
+		app.Errorf("Unable to validate plugin input")
+		fmt.Sprintf("%s: %s\n", "Plugin Input", bs)
+		fmt.Sprintf("%s: %s\n", "Error", err)
+		fmt.Sprintf("%s: %s\n", "Path", path)
+		os.Exit(exitCodePluginError)
 	} else {
 		if *validateSpecific || *validateDefault {
 			fmt.Printf("Plugin input validation passed\n")
@@ -190,21 +218,15 @@ func (p *PluginInput) generateUserID() {
 	userIdJsonReduced := map[string](*json.RawMessage){}
 
 	userInfo := *(*p)["user_info"]
-	//fmt.Printf("user_info: %s\n", userInfo)
 
 	err := json.Unmarshal(userInfo, &userIdJson)
-	if err != nil {
-		fmt.Printf("Error unmarshaling watts_userid: %s\n", err)
-		os.Exit(1)
-	}
-
-	//fmt.Printf("uid:%s\n", userIdJson)
+	check(err, exitCodeInternalError, "Error unmarshaling watts_userid")
 
 	userIdJsonReduced["issuer"] = userIdJson["iss"]
 	userIdJsonReduced["subject"] = userIdJson["sub"]
 
 	j, err := json.Marshal(userIdJsonReduced)
-	//fmt.Printf("reduced uid:%s\n", j)
+	check(err, exitCodeInternalError, "")
 
 	escaped := bytes.Replace(j, []byte{'/'}, []byte{'\\', '/'}, -1)
 	st := fmt.Sprintf("\"%s\"", base64url.Encode(escaped))
@@ -214,95 +236,117 @@ func (p *PluginInput) generateUserID() {
 }
 
 func (p *PluginInput) marshalPluginInput() (s []byte) {
-	var err error
-
-	s, err = json.MarshalIndent(*p, outputIndentation, outputTabWidth)
-	if err != nil {
-		fmt.Printf("Unable to marshal: Error (%s)\n%s\n", err, s)
-		os.Exit(1)
-	}
+	s, err := json.MarshalIndent(*p, outputIndentation, outputTabWidth)
+	check(err, exitCodeInternalError, fmt.Sprintf("unable to marshal '%s'", s))
 	return
 }
 
-func (p *PluginInput) specifyPluginInput(path string) {
-	p = &defaultPluginInput
+func (p *PluginInput) specifyPluginInput() {
 
-	if path == "" {
+	// merge a user provided watts config
+	if *pluginInputConfOverride != "" {
+		if *pluginInputConfOverrideIdentifier != "" {
+			fileContent, err := ioutil.ReadFile(*pluginInputConfOverride)
+			check(err, exitCodeUserError, "")
+
+			regex := fmt.Sprintf("service.%s.plugin.(?P<key>.+) = (?P<value>.+)\n",
+				*pluginInputConfOverrideIdentifier)
+			configExtractor, err := regexp.Compile(regex)
+			check(err, exitCodeInternalError, "")
+
+			matches := configExtractor.FindAllSubmatch(fileContent, 10)
+
+			if len(matches) > 0 {
+				confParams := map[string]string{}
+				for i := 1; i < len(matches); i++ {
+					confParams[string(matches[i][1])] = string(matches[i][2])
+				}
+
+				confParamsJson, err := json.Marshal(confParams)
+				check(err, exitCodeInternalError, "Formatting conf parameters")
+
+				defaultConfParams = json.RawMessage(confParamsJson)
+			} else {
+				app.Errorf("Could not find configuration parameters for '%s' in '%s'",
+					*pluginInputConfOverrideIdentifier, *pluginInputConfOverride)
+				os.Exit(exitCodeUserError)
+			}
+
+		} else {
+			app.Errorf("Need a config identifier for config override")
+			os.Exit(exitCodeUserError)
+		}
+	}
+
+	// merge a user provided json file
+	if *pluginInputOverride != "" {
+		overrideBytes, err := ioutil.ReadFile(*pluginInputOverride)
+		check(err, exitCodeUserError, "")
+
+		overridePluginInput := PluginInput{}
+		err = json.Unmarshal(overrideBytes, &overridePluginInput)
+		check(err, exitCodeUserError, "on unmarshaling user provided json")
+
+		err = mergo.Merge(&overridePluginInput, p)
+		check(err, exitCodeInternalError, "on merging user provided json")
+
+		*p = overridePluginInput
 		return
 	}
+}
 
-	overrideBytes, err := ioutil.ReadFile(*pluginInputOverride)
-	if err != nil {
-		fmt.Println("Error reading user provided file ", *pluginInputOverride, " (", err, ")")
-		os.Exit(1)
+func (p *PluginInput) version() (version string) {
+	versionJson := (*p)["watts_version"]
+	versionBytes, err := json.Marshal(&versionJson)
+	check(err, exitCodeInternalError, "")
+
+	versionExtractor, _ := regexp.Compile("[^\"+]+")
+	extractedVersion := versionExtractor.Find(versionBytes)
+
+	if _, versionFound := wattsSchemes[string(extractedVersion)]; !versionFound {
+		extractedVersion = versionExtractor.Find(defaultWattsVersion)
+		(*p)["watts_version"] = &defaultWattsVersion
 	}
 
-	overridePluginInput := PluginInput{}
-	err = json.Unmarshal(overrideBytes, &overridePluginInput)
-	if err != nil {
-		fmt.Println("Error unmarshaling user provided json: ", *pluginInputOverride, " (", err, ")")
-		os.Exit(1)
-	}
-
-	err = mergo.Merge(&overridePluginInput, p)
-	if err != nil {
-		fmt.Println("Error merging: (", err, ")")
-		os.Exit(1)
-	}
-
-	*p = overridePluginInput
+	version = string(extractedVersion)
 	return
 }
 
-func (pluginInput *PluginInput) doPluginTest(pluginName string) (output Output) {
+func (p *PluginInput) doPluginTest() (output Output) {
 	output = Output{}
 
-	var wattsVersion string
-	rv := (*pluginInput)["watts_version"]
-	v, err := json.Marshal(&rv)
-	if err == nil {
-		wattsVersion = string(bytes.Replace(v, []byte{'"'}, []byte{}, -1))
-		if _, versionFound := wattsSchemes[wattsVersion]; !versionFound {
-			wattsVersion = string(bytes.Replace(defaultWattsVersion, []byte{'"'}, []byte{}, -1))
-		}
-	} else {
-		fmt.Printf("error %s\n", err)
-		os.Exit(1)
-	}
+	wattsVersion := p.version()
 
-	pluginInputJson := pluginInput.marshalPluginInput()
+	pluginInputJson := p.marshalPluginInput()
 
-	output.print("plugin_name", pluginName)
+	output.print("plugin_name", *pluginTestName)
 	output.print("action", *pluginTestAction)
 	output.printJson("input", json.RawMessage(pluginInputJson))
 
 	inputBase64 := base64.StdEncoding.EncodeToString(pluginInputJson)
 
+	var cmd *exec.Cmd
+	if *useEnvForParameterPass {
+		cmd = exec.Command(*pluginTestName)
+		cmd.Env = []string{fmt.Sprintf("%s=%s", *envVarForParameterPass, inputBase64)}
+	} else {
+		cmd = exec.Command(*pluginTestName, inputBase64)
+	}
+
 	timeBeforeExec := time.Now()
-	pluginOutput, err := exec.Command(pluginName, inputBase64).CombinedOutput()
+	pluginOutput, err := cmd.CombinedOutput()
 	timeAfterExec := time.Now()
 	execDuration := timeAfterExec.Sub(timeBeforeExec)
+
 	if err != nil {
 		output.print("result", "error")
 		output.print("error", fmt.Sprint(err))
 		output.print("description", "error executing the plugin")
+		exitCode = 3
 		return
 	}
 
 	output.printJson("output", byteToRawMessage(pluginOutput))
-	//fmt.Printf("pluginOutput: %s\n", pluginOutput)
-
-	/*
-		pluginOutputJson := json.RawMessage(``)
-		err = json.Unmarshal(pluginOutput, &pluginOutputJson)
-		if err != nil {
-			output.print("output", string(pluginOutput))
-		} else {
-			output.printJson("output", pluginOutputJson)
-		}
-
-		fmt.Printf("Output: %s\n", output)
-	*/
 
 	var pluginOutputInterface interface{}
 	err = json.Unmarshal(pluginOutput, &pluginOutputInterface)
@@ -310,15 +354,17 @@ func (pluginInput *PluginInput) doPluginTest(pluginName string) (output Output) 
 		output.print("result", "error")
 		output.print("error", fmt.Sprintf("%s", err))
 		output.print("description", "error processing the output of the plugin (into an interface)")
+		exitCode = 1
 		return
 	}
 
 	output.print("time", fmt.Sprint(execDuration))
 
-	path, errr := wattsSchemes[wattsVersion][*pluginTestAction].Validate(pluginOutputInterface)
-	if errr != nil {
+	path, err := wattsSchemes[wattsVersion][*pluginTestAction].Validate(pluginOutputInterface)
+	if err != nil {
 		output.print("result", "error")
-		output.print("description", fmt.Sprintf("Validation error at %s. Error (%s)", path, errr))
+		output.print("description", fmt.Sprintf("Validation error at %s. Error (%s)", path, err))
+		exitCode = 1
 		return
 	} else {
 		output.print("result", "ok")
@@ -389,9 +435,12 @@ func byteToRawMessage(inputBytes []byte) (rawMessage json.RawMessage) {
 * all plugin input generation shall take place here
  */
 func main() {
+	app.Author("Lukas Burgey @ KIT within the INDIGO DataCloud Project")
+	app.Version("0.1.7")
+
 	switch kingpin.MustParse(app.Parse(os.Args[1:])) {
 	case pluginTest.FullCommand():
-		defaultPluginInput.specifyPluginInput(*pluginInputOverride)
+		defaultPluginInput.specifyPluginInput()
 
 		defaultAction = json.RawMessage(fmt.Sprintf("\"%s\"", *pluginTestAction))
 		defaultPluginInput["action"] = &defaultAction
@@ -399,7 +448,7 @@ func main() {
 		defaultPluginInput.generateUserID()
 		defaultPluginInput.validate()
 
-		fmt.Printf("%s", defaultPluginInput.doPluginTest(*pluginTestName))
+		fmt.Printf("%s", defaultPluginInput.doPluginTest())
 
 	case printDefault.FullCommand():
 		if *validateDefault {
@@ -409,16 +458,14 @@ func main() {
 		fmt.Printf("%s", defaultPluginInput.marshalPluginInput())
 
 	case printSpecific.FullCommand():
-		defaultPluginInput.specifyPluginInput(*pluginInputOverride)
+		defaultPluginInput.specifyPluginInput()
 		defaultPluginInput.generateUserID()
 		if *validateSpecific {
 			defaultPluginInput.validate()
 		}
 
 		fmt.Printf("%s", defaultPluginInput.marshalPluginInput())
-
-	case printVersion.FullCommand():
-		fmt.Printf("%s\n", version)
-
 	}
+
+	os.Exit(exitCode)
 }

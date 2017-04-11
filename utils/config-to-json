@@ -1,0 +1,11 @@
+#!/bin/bash
+
+if [[ ! -f $1 ]]; then  echo "config-to-json <file> <plugin identifier>" && exit 1; fi
+
+json="`grep "service.$2.plugin" $1 |\
+	grep -oP '(?<=.plugin\.).*' |\
+	sed 's/^/\"/g;  s/$/\",/g;  s/ \= /": "/g'`"
+
+echo "{\"conf_params\": {
+${json::-1}
+}}"
