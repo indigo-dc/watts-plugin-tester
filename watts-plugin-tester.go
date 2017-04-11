@@ -249,17 +249,27 @@ func (p *PluginInput) specifyPluginInput() {
 
 			regex := fmt.Sprintf("service.%s.plugin.(?P<key>.+) = (?P<value>.+)\n",
 				*pluginInputConfOverrideIdentifier)
-			configExtractor, _ := regexp.Compile(regex)
+			configExtractor, err := regexp.Compile(regex)
+			check(err, exitCodeInternalError, "")
+
 			matches := configExtractor.FindAllSubmatch(fileContent, 10)
 
-			confParams := map[string]string{}
-			for i := 1; i < len(matches); i++ {
-				confParams[string(matches[i][1])] = string(matches[i][2])
-			}
-			b, err := json.Marshal(confParams)
-			check(err, exitCodeInternalError, "Formatting conf parameters")
+			if len(matches) > 0 {
+				confParams := map[string]string{}
+				for i := 1; i < len(matches); i++ {
+					confParams[string(matches[i][1])] = string(matches[i][2])
+				}
 
-			defaultConfParams = json.RawMessage(b)
+				confParamsJson, err := json.Marshal(confParams)
+				check(err, exitCodeInternalError, "Formatting conf parameters")
+
+				defaultConfParams = json.RawMessage(confParamsJson)
+			} else {
+				app.Errorf("Could not find configuration parameters for '%s' in '%s'",
+					*pluginInputConfOverrideIdentifier, *pluginInputConfOverride)
+				os.Exit(exitCodeUserError)
+			}
+
 		} else {
 			app.Errorf("Need a config identifier for config override")
 			os.Exit(exitCodeUserError)
