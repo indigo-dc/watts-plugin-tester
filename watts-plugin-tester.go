@@ -407,16 +407,13 @@ func (o *Output) print(a string, b string) {
 	outputMessages = append(outputMessages, m)
 	(*o)[a] = &(outputMessages[len(outputMessages)-1])
 }
-
 func (o *Output) printArbitrary(a string, b string) {
 	if !*machineReadable {
 		fmt.Printf("%15s: %s\n", a, b)
 		return
 	}
 
-	escaped := strings.Replace(b, "\n", "", -1)
-	escaped = strings.Replace(escaped, "\"", "\\\"", -1)
-	m := toRawJsonString(escaped)
+	m := toRawJsonString(escapeJsonString(b))
 	outputMessages = append(outputMessages, m)
 	(*o)[a] = &(outputMessages[len(outputMessages)-1])
 }
@@ -435,21 +432,17 @@ func (o Output) String() string {
 }
 
 func byteToRawMessage(inputBytes []byte) (rawMessage json.RawMessage) {
+	rawMessage = json.RawMessage(``)
+
 	testJsonObject := map[string]interface{}{}
 	err := json.Unmarshal(inputBytes, &testJsonObject)
 	if err != nil {
-		escaped := strings.Replace(string(inputBytes), "\n", "\\n", -1)
-		escaped = strings.Replace(escaped, "\"", "\\\"", -1)
-
-		rawMessage = toRawJsonString(escaped)
+		rawMessage = toRawJsonString(escapeJsonString(string(inputBytes)))
 	} else {
-		jsonObject := json.RawMessage(``)
-		err = json.Unmarshal(inputBytes, &jsonObject)
+		err = json.Unmarshal(inputBytes, &rawMessage)
 		if err != nil {
 			app.Errorf("unmarshal successful, but bad json conversion: '%s'\n", string(inputBytes))
 			rawMessage = toRawJsonString("got erroneous output")
-		} else {
-			rawMessage = jsonObject
 		}
 	}
 	return
@@ -457,6 +450,12 @@ func byteToRawMessage(inputBytes []byte) (rawMessage json.RawMessage) {
 
 func toRawJsonString(str string) (jo json.RawMessage) {
 	jo = json.RawMessage(fmt.Sprintf("\"%s\"", str))
+	return
+}
+
+func escapeJsonString(s string) (e string) {
+	e = strings.Replace(s, "\n", "", -1)
+	e = strings.Replace(e, "\"", "\\\"", -1)
 	return
 }
 
