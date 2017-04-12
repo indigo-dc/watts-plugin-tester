@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"strings"
 	"time"
 )
 
@@ -347,7 +348,7 @@ func (p *PluginInput) doPluginTest() (output Output) {
 	if err != nil {
 		output.print("result", "error")
 		output.print("error", fmt.Sprint(err))
-		output.print("output", string(pluginOutput))
+		output.printArbitrary("output", string(pluginOutput))
 		output.print("description", "error executing the plugin")
 		exitCode = 3
 		return
@@ -359,8 +360,8 @@ func (p *PluginInput) doPluginTest() (output Output) {
 	err = json.Unmarshal(pluginOutput, &pluginOutputInterface)
 	if err != nil {
 		output.print("result", "error")
-		output.print("error", fmt.Sprintf("%s", err))
-		output.print("description", "error processing the output of the plugin (into an interface)")
+		output.print("description", "error processing the output of the plugin")
+		output.printArbitrary("error", fmt.Sprintf("%s", err))
 		exitCode = 1
 		return
 	}
@@ -370,7 +371,8 @@ func (p *PluginInput) doPluginTest() (output Output) {
 	path, err := wattsSchemes[wattsVersion][*pluginTestAction].Validate(pluginOutputInterface)
 	if err != nil {
 		output.print("result", "error")
-		output.print("description", fmt.Sprintf("Validation error at %s. Error (%s)", path, err))
+		output.print("description", fmt.Sprintf("validation error %s", err))
+		output.print("path", path)
 		exitCode = 1
 		return
 	} else {
@@ -406,6 +408,19 @@ func (o *Output) print(a string, b string) {
 	(*o)[a] = &(outputMessages[len(outputMessages)-1])
 }
 
+func (o *Output) printArbitrary(a string, b string) {
+	if !*machineReadable {
+		fmt.Printf("%15s: %s\n", a, b)
+		return
+	}
+
+	escaped := strings.Replace(b, "\n", "", -1)
+	escaped = strings.Replace(escaped, "\"", "\\\"", -1)
+	m := toRawJsonString(escaped)
+	outputMessages = append(outputMessages, m)
+	(*o)[a] = &(outputMessages[len(outputMessages)-1])
+}
+
 func (o Output) String() string {
 	if !*machineReadable {
 		return ""
@@ -413,7 +428,7 @@ func (o Output) String() string {
 
 	bs, err := json.MarshalIndent(&o, "", outputTabWidth)
 	if err != nil {
-		return fmt.Sprintf("error producing machine readable output: %s\n%s\n", err)
+		return fmt.Sprintf("error producing machine readable output: %s\n", err)
 	} else {
 		return fmt.Sprintf("%s", string(bs))
 	}
@@ -423,14 +438,16 @@ func byteToRawMessage(inputBytes []byte) (rawMessage json.RawMessage) {
 	testJsonObject := map[string]interface{}{}
 	err := json.Unmarshal(inputBytes, &testJsonObject)
 	if err != nil {
-		os.Stderr.WriteString(fmt.Sprintf("got invalid json: '%s'\n", string(inputBytes)))
-		rawMessage = toRawJsonString("got erroneous output")
+		escaped := strings.Replace(string(inputBytes), "\n", "\\n", -1)
+		escaped = strings.Replace(escaped, "\"", "\\\"", -1)
+
+		rawMessage = toRawJsonString(escaped)
 	} else {
 		jsonObject := json.RawMessage(``)
-		errr := json.Unmarshal(inputBytes, &jsonObject)
-		if errr != nil {
-			os.Stderr.WriteString(fmt.Sprintf("unmarshal successful, but bad json conversion: '%s'\n", string(inputBytes)))
-			rawMessage = json.RawMessage(fmt.Sprintf("\"%s\"", "got erroneous output"))
+		err = json.Unmarshal(inputBytes, &jsonObject)
+		if err != nil {
+			app.Errorf("unmarshal successful, but bad json conversion: '%s'\n", string(inputBytes))
+			rawMessage = toRawJsonString("got erroneous output")
 		} else {
 			rawMessage = jsonObject
 		}
