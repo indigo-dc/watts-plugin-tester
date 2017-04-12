@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"strings"
 	"time"
 )
 
@@ -33,8 +34,8 @@ var (
 	pluginInputConfOverride           = app.Flag("config", "Use the config parameters from the provided watts config. Specify the config-identifier!").Short('c').String()
 	pluginInputConfOverrideIdentifier = app.Flag("config-identifier", "Plugin identifier for identifying the plugin in the watts config").Short('i').String()
 	machineReadable                   = app.Flag("machine", "Be machine readable (all output will be json)").Short('m').Bool()
-	useEnvForParameterPass = app.Flag("env", "Use this environment variable to pass the plugin input to the plugin").Short('e').Bool()
-	envVarForParameterPass = app.Flag("env-var", "This environment variable is used to pass the plugin input to the plugin. Defaults to WATTS_PARAMETER").Default("WATTS_PARAMETER").String()
+	useEnvForParameterPass            = app.Flag("env", "Use this environment variable to pass the plugin input to the plugin").Short('e').Bool()
+	envVarForParameterPass            = app.Flag("env-var", "This environment variable is used to pass the plugin input to the plugin. Defaults to WATTS_PARAMETER").Default("WATTS_PARAMETER").String()
 
 	pluginTest     = app.Command("test", "Test a plugin")
 	pluginTestName = pluginTest.Arg("pluginName", "Name of the plugin to test").Required().String()
@@ -188,6 +189,13 @@ func validateRequestScheme(data interface{}) (path string, err error) {
 	return schemesRequest[resultValue].Validate(data)
 }
 
+func validatePluginAction(action string) {
+	if action != "request" && action != "parameter" && action != "revoke" {
+		app.Errorf("invalid plugin action %s", action)
+		os.Exit(exitCodeUserError)
+	}
+}
+
 func (p *PluginInput) validate() {
 	var bs []byte
 	var i interface{}
@@ -229,8 +237,7 @@ func (p *PluginInput) generateUserID() {
 	check(err, exitCodeInternalError, "")
 
 	escaped := bytes.Replace(j, []byte{'/'}, []byte{'\\', '/'}, -1)
-	st := fmt.Sprintf("\"%s\"", base64url.Encode(escaped))
-	defaultWattsUserId = json.RawMessage(st)
+	defaultWattsUserId = toRawJsonString(base64url.Encode(escaped))
 	(*p)["watts_userid"] = &defaultWattsUserId
 	return
 }
@@ -341,6 +348,7 @@ func (p *PluginInput) doPluginTest() (output Output) {
 	if err != nil {
 		output.print("result", "error")
 		output.print("error", fmt.Sprint(err))
+		output.printArbitrary("output", string(pluginOutput))
 		output.print("description", "error executing the plugin")
 		exitCode = 3
 		return
@@ -352,8 +360,8 @@ func (p *PluginInput) doPluginTest() (output Output) {
 	err = json.Unmarshal(pluginOutput, &pluginOutputInterface)
 	if err != nil {
 		output.print("result", "error")
-		output.print("error", fmt.Sprintf("%s", err))
-		output.print("description", "error processing the output of the plugin (into an interface)")
+		output.print("description", "error processing the output of the plugin")
+		output.printArbitrary("error", fmt.Sprintf("%s", err))
 		exitCode = 1
 		return
 	}
@@ -363,7 +371,8 @@ func (p *PluginInput) doPluginTest() (output Output) {
 	path, err := wattsSchemes[wattsVersion][*pluginTestAction].Validate(pluginOutputInterface)
 	if err != nil {
 		output.print("result", "error")
-		output.print("description", fmt.Sprintf("Validation error at %s. Error (%s)", path, err))
+		output.print("description", fmt.Sprintf("validation error %s", err))
+		output.print("path", path)
 		exitCode = 1
 		return
 	} else {
@@ -394,7 +403,20 @@ func (o *Output) print(a string, b string) {
 		return
 	}
 
-	m := json.RawMessage(fmt.Sprintf("\"%s\"", b))
+	m := toRawJsonString(b)
+	outputMessages = append(outputMessages, m)
+	(*o)[a] = &(outputMessages[len(outputMessages)-1])
+}
+
+func (o *Output) printArbitrary(a string, b string) {
+	if !*machineReadable {
+		fmt.Printf("%15s: %s\n", a, b)
+		return
+	}
+
+	escaped := strings.Replace(b, "\n", "", -1)
+	escaped = strings.Replace(escaped, "\"", "\\\"", -1)
+	m := toRawJsonString(escaped)
 	outputMessages = append(outputMessages, m)
 	(*o)[a] = &(outputMessages[len(outputMessages)-1])
 }
@@ -406,7 +428,7 @@ func (o Output) String() string {
 
 	bs, err := json.MarshalIndent(&o, "", outputTabWidth)
 	if err != nil {
-		return fmt.Sprintf("error producing machine readable output: %s\n%s\n", err)
+		return fmt.Sprintf("error producing machine readable output: %s\n", err)
 	} else {
 		return fmt.Sprintf("%s", string(bs))
 	}
@@ -416,18 +438,25 @@ func byteToRawMessage(inputBytes []byte) (rawMessage json.RawMessage) {
 	testJsonObject := map[string]interface{}{}
 	err := json.Unmarshal(inputBytes, &testJsonObject)
 	if err != nil {
-		os.Stderr.WriteString(fmt.Sprintf("got invalid json: '%s'\n", string(inputBytes)))
-		rawMessage = json.RawMessage(fmt.Sprintf("\"%s\"", "got erroneous output"))
+		escaped := strings.Replace(string(inputBytes), "\n", "\\n", -1)
+		escaped = strings.Replace(escaped, "\"", "\\\"", -1)
+
+		rawMessage = toRawJsonString(escaped)
 	} else {
 		jsonObject := json.RawMessage(``)
-		errr := json.Unmarshal(inputBytes, &jsonObject)
-		if errr != nil {
-			os.Stderr.WriteString(fmt.Sprintf("unmarshal successful, but bad json conversion: '%s'\n", string(inputBytes)))
-			rawMessage = json.RawMessage(fmt.Sprintf("\"%s\"", "got erroneous output"))
+		err = json.Unmarshal(inputBytes, &jsonObject)
+		if err != nil {
+			app.Errorf("unmarshal successful, but bad json conversion: '%s'\n", string(inputBytes))
+			rawMessage = toRawJsonString("got erroneous output")
 		} else {
 			rawMessage = jsonObject
 		}
 	}
+	return
+}
+
+func toRawJsonString(str string) (jo json.RawMessage) {
+	jo = json.RawMessage(fmt.Sprintf("\"%s\"", str))
 	return
 }
 
@@ -440,9 +469,10 @@ func main() {
 
 	switch kingpin.MustParse(app.Parse(os.Args[1:])) {
 	case pluginTest.FullCommand():
-		defaultPluginInput.specifyPluginInput()
+		validatePluginAction(*pluginTestAction)
 
-		defaultAction = json.RawMessage(fmt.Sprintf("\"%s\"", *pluginTestAction))
+		defaultPluginInput.specifyPluginInput()
+		defaultAction = toRawJsonString(*pluginTestAction)
 		defaultPluginInput["action"] = &defaultAction
 
 		defaultPluginInput.generateUserID()
