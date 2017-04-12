@@ -465,7 +465,7 @@ func toRawJsonString(str string) (jo json.RawMessage) {
  */
 func main() {
 	app.Author("Lukas Burgey @ KIT within the INDIGO DataCloud Project")
-	app.Version("0.2.0")
+	app.Version("0.2.1")
 
 	switch kingpin.MustParse(app.Parse(os.Args[1:])) {
 	case pluginTest.FullCommand():
