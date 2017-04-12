@@ -17,12 +17,11 @@ features
 - parse configuration parameters from an existing watts.conf
 	- lower precedence than a provided json
 - machine readable json output
-	- does not work if the plugin prints arbitrary output
 
 
 watts version support
 ---
-- [x] 1.0.0 
+- [x] 1.0.0
 
 
 interpretation of exit codes
