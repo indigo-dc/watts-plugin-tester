@@ -45,6 +45,10 @@ var (
 	printSpecific    = app.Command("specific", "Print the plugin input (including the user override) as json")
 	validateSpecific = printSpecific.Flag("validate", "Validate the produced json").Short('v').Bool()
 
+	generateDefault  = app.Command("generate", "Generate a fitting json input file for the given plugin")
+	pluginGenerateName = generateDefault.Arg("pluginName", "Name of the plugin to generate a default json for").Required().String()
+
+
 	outputMessages = []json.RawMessage{}
 
 	// for MarshalIndent
@@ -319,45 +323,47 @@ func (p *PluginInput) version() (version string) {
 	return
 }
 
-func (p *PluginInput) doPluginTest() (output Output) {
-	output = Output{}
-
-	wattsVersion := p.version()
-
+func (p *PluginInput) executePlugin(pluginName string) (outputBytes []byte, err error, duration string) {
 	pluginInputJson := p.marshalPluginInput()
-
-	output.print("plugin_name", *pluginTestName)
-	output.print("action", *pluginTestAction)
-	output.printJson("input", json.RawMessage(pluginInputJson))
-
 	inputBase64 := base64.StdEncoding.EncodeToString(pluginInputJson)
 
 	var cmd *exec.Cmd
 	if *useEnvForParameterPass {
-		cmd = exec.Command(*pluginTestName)
+		cmd = exec.Command(pluginName)
 		cmd.Env = []string{fmt.Sprintf("%s=%s", *envVarForParameterPass, inputBase64)}
 	} else {
-		cmd = exec.Command(*pluginTestName, inputBase64)
+		cmd = exec.Command(pluginName, inputBase64)
 	}
 
 	timeBeforeExec := time.Now()
-	pluginOutput, err := cmd.CombinedOutput()
+	outputBytes, err = cmd.CombinedOutput()
 	timeAfterExec := time.Now()
-	execDuration := timeAfterExec.Sub(timeBeforeExec)
+	duration = fmt.Sprintf("%s", timeAfterExec.Sub(timeBeforeExec))
 
+	return
+}
+
+func (p *PluginInput) doPluginTest(pluginName string) (output Output) {
+	output = Output{}
+
+	output.print("plugin_name", pluginName)
+	output.printJson("input", json.RawMessage(p.marshalPluginInput()))
+
+	outputBytes, err, time := p.executePlugin(pluginName)
 	if err != nil {
 		output.print("result", "error")
 		output.print("error", fmt.Sprint(err))
-		output.printArbitrary("output", string(pluginOutput))
+		output.printArbitrary("output", string(outputBytes))
 		output.print("description", "error executing the plugin")
 		exitCode = 3
 		return
 	}
 
-	output.printJson("output", byteToRawMessage(pluginOutput))
+	output.printJson("output", byteToRawMessage(outputBytes))
+	output.print("time", time)
 
 	var pluginOutputInterface interface{}
-	err = json.Unmarshal(pluginOutput, &pluginOutputInterface)
+	err = json.Unmarshal(outputBytes, &pluginOutputInterface)
 	if err != nil {
 		output.print("result", "error")
 		output.print("description", "error processing the output of the plugin")
@@ -366,9 +372,7 @@ func (p *PluginInput) doPluginTest() (output Output) {
 		return
 	}
 
-	output.print("time", fmt.Sprint(execDuration))
-
-	path, err := wattsSchemes[wattsVersion][*pluginTestAction].Validate(pluginOutputInterface)
+	path, err := wattsSchemes[p.version()][*pluginTestAction].Validate(pluginOutputInterface)
 	if err != nil {
 		output.print("result", "error")
 		output.print("description", fmt.Sprintf("validation error %s", err))
@@ -431,6 +435,11 @@ func (o Output) String() string {
 	}
 }
 
+func (o *Output) toDefaultJson() {
+	fmt.Printf("%s %T", (*o), (*o))
+	return
+}
+
 func byteToRawMessage(inputBytes []byte) (rawMessage json.RawMessage) {
 	rawMessage = json.RawMessage(``)
 
@@ -477,7 +486,37 @@ func main() {
 		defaultPluginInput.generateUserID()
 		defaultPluginInput.validate()
 
-		fmt.Printf("%s", defaultPluginInput.doPluginTest())
+		fmt.Printf("%s", defaultPluginInput.doPluginTest(*pluginTestName))
+
+	case generateDefault.FullCommand():
+		defaultPluginInput.specifyPluginInput()
+		defaultPluginInput["action"] = &defaultAction
+
+		defaultPluginInput.generateUserID()
+		defaultPluginInput.validate()
+
+		output, _, _ := defaultPluginInput.executePlugin(*pluginGenerateName)
+
+		m := map[string]interface{}{}
+		err := json.Unmarshal(output, &m)
+		check(err, 1, "foo")
+		confParams := m["conf_params"].([]interface{})
+		
+		generatedConfig := map[string](interface{}) {}
+		for _, v := range confParams {
+			mm := v.(map[string]interface{})
+			generatedConfig[mm["name"].(string)] = mm["default"].(string)
+		}
+
+		b, err := json.Marshal(generatedConfig)
+		check(err, exitCodeInternalError, "")
+		defaultConfParams = byteToRawMessage(b)
+
+		if *validateDefault {
+			defaultPluginInput.validate()
+		}
+
+		fmt.Printf("%s", defaultPluginInput.marshalPluginInput())
 
 	case printDefault.FullCommand():
 		if *validateDefault {
