@@ -17,6 +17,7 @@ features
 - parse configuration parameters from an existing watts.conf
 	- lower precedence than a provided json
 - machine readable json output
+- generate a default json from the output of the plugins parameter action
 
 
 watts version support
