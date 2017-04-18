@@ -478,7 +478,7 @@ func escapeJsonString(s string) (e string) {
  */
 func main() {
 	app.Author("Lukas Burgey @ KIT within the INDIGO DataCloud Project")
-	app.Version("0.3.0")
+	app.Version("0.4.0")
 
 	switch kingpin.MustParse(app.Parse(os.Args[1:])) {
 	case pluginTest.FullCommand():
