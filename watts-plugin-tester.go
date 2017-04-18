@@ -52,9 +52,7 @@ var (
 	pluginTestName = pluginTest.Arg("pluginName", "Name of the plugin to test").Required().String()
 
 	printDefault     = app.Command("default", "Print the default plugin input as json")
-	validateDefault  = printDefault.Flag("validate", "Validate the produced json").Short('v').Bool()
 	printSpecific    = app.Command("specific", "Print the plugin input (including the user override) as json")
-	validateSpecific = printSpecific.Flag("validate", "Validate the produced json").Short('v').Bool()
 
 	generateDefault    = app.Command("generate", "Generate a fitting json input file for the given plugin")
 	pluginGenerateName = generateDefault.Arg("pluginName", "Name of the plugin to generate a default json for").Required().String()
@@ -66,12 +64,12 @@ var (
 	outputTabWidth    = "    "
 
 	defaultwattVersionString = "1.0.0"
-	defaultWattsVersion      = toRawJSONString(defaultwattVersionString)
-	defaultCredentialState   = toRawJSONString("undefined")
-	defaultConfParams        = json.RawMessage(`{}`)
-	defaultParams            = json.RawMessage(`{}`)
-	defaultAdditionalLogins  = json.RawMessage(`[]`)
-	defaultUserInfo          = json.RawMessage(`{
+	defaultWattsVersion     = toRawJSONString(defaultwattVersionString)
+	defaultCredentialState  = toRawJSONString("undefined")
+	defaultConfParams       = json.RawMessage(`{}`)
+	defaultParams           = json.RawMessage(`{}`)
+	defaultAdditionalLogins = json.RawMessage(`[]`)
+	defaultUserInfo         = json.RawMessage(`{
 		"iss": "https://issuer.example.com",
 		"sub": "123456789"
 	}`)
@@ -228,11 +226,7 @@ func (p *pluginInput) validate() {
 		fmt.Printf("%s: %s\n", "Error", err)
 		fmt.Printf("%s: %s\n", "Path", path)
 		os.Exit(exitCodePluginError)
-	} else {
-		if *validateSpecific || *validateDefault {
-			fmt.Printf("Plugin input validation passed\n")
-		}
-	}
+	} 
 
 	return
 }
@@ -537,25 +531,17 @@ func main() {
 		check(err, exitCodeInternalError, "")
 		defaultConfParams = byteToRawMessage(b)
 
-		if *validateDefault {
-			defaultPluginInput.validate()
-		}
+		defaultPluginInput.validate()
 
 		fmt.Printf("%s", defaultPluginInput.marshalPluginInput())
 
 	case printDefault.FullCommand():
-		if *validateDefault {
-			defaultPluginInput.validate()
-		}
-
 		fmt.Printf("%s", defaultPluginInput.marshalPluginInput())
 
 	case printSpecific.FullCommand():
 		defaultPluginInput.specifyPluginInput()
 		defaultPluginInput.generateUserID()
-		if *validateSpecific {
-			defaultPluginInput.validate()
-		}
+		defaultPluginInput.validate()
 
 		fmt.Printf("%s", defaultPluginInput.marshalPluginInput())
 	}
