@@ -59,7 +59,7 @@ test_plugin() {
        --argjson output "$output" \
        --arg expected "$expected" \
        --arg name "$name" \
-       '$list+[$output+{expected_result:$expected, test_name:$name}]' \
+       '$list+[{output: $output, expected_result:$expected, test_name:$name}]' \
        > test_results.json
 }
 
