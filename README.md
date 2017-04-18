@@ -24,6 +24,8 @@ watts version support
 ---
 - [x] 1.0.0
 
+Remark: leading 'v's in a provided version will be ignored,w
+
 
 interpretation of exit codes
 ---
