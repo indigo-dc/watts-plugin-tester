@@ -1,23 +1,26 @@
 #!/bin/bash
 
-GO=`which go`
-PATH_TO_SCRIPT=`readlink -f ${0}`
-PATH_TO_FOLDER=`dirname "$PATH_TO_SCRIPT"`
+PACKAGE=github.com/indigo-dc/watts-plugin-tester
 
-if [ "x$GO" == "x" ]; then
-    echo "go missing, please install go 1.5 or newer"
-    exit 1
+if ! which go >/dev/null
+then
+	echo "go missing, please install go 1.5 or newer"
+	exit 1
+fi
+
+if [[ -z $GOPATH ]]
+then
+	export GOPATH=`pwd -P`/gopath
+	echo using local GOPATH $GOPATH
 fi
 
 VERSION=`go version`
-GOPATH=`cd "${PATH_TO_FOLDER}/.." && pwd -P`
-echo " "
 echo "running the build with '$VERSION', please include in issue reports"
-echo " "
-export "GOPATH=${GOPATH}"
-echo "fetiching:"
-go get
+
+echo "fetching:"
+go get $PACKAGE
 echo "done"
-echo -n "building watts-plugin-tester ... "
-go build -o watts-plugin-tester ${GOPATH}/watts-plugin-tester.go
+
+echo "building:"
+go build -o watts-plugin-tester $PACKAGE
 echo "done"
