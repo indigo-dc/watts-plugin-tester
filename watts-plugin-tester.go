@@ -18,6 +18,11 @@ import (
 )
 
 type PluginInput map[string](*json.RawMessage)
+type PluginOutput struct {
+	outputBytes []byte
+	err	error
+	duration string
+}
 
 type Output map[string](*json.RawMessage)
 
@@ -311,7 +316,7 @@ func (p *PluginInput) version() (version string) {
 	versionBytes, err := json.Marshal(&versionJson)
 	check(err, exitCodeInternalError, "")
 
-	versionExtractor, _ := regexp.Compile("[^\"+]+")
+	versionExtractor, _ := regexp.Compile("[^\"+v]+")
 	extractedVersion := versionExtractor.Find(versionBytes)
 
 	if _, versionFound := wattsSchemes[string(extractedVersion)]; !versionFound {
@@ -323,7 +328,7 @@ func (p *PluginInput) version() (version string) {
 	return
 }
 
-func (p *PluginInput) executePlugin(pluginName string) (outputBytes []byte, err error, duration string) {
+func (p *PluginInput) executePlugin(pluginName string) (output PluginOutput) {
 	pluginInputJson := p.marshalPluginInput()
 	inputBase64 := base64.StdEncoding.EncodeToString(pluginInputJson)
 
@@ -336,11 +341,11 @@ func (p *PluginInput) executePlugin(pluginName string) (outputBytes []byte, err 
 	}
 
 	timeBeforeExec := time.Now()
-	outputBytes, err = cmd.CombinedOutput()
+	outputBytes, err := cmd.CombinedOutput()
 	timeAfterExec := time.Now()
-	duration = fmt.Sprintf("%s", timeAfterExec.Sub(timeBeforeExec))
+	duration := fmt.Sprintf("%s", timeAfterExec.Sub(timeBeforeExec))
 
-	return
+	return PluginOutput{outputBytes, err, duration}
 }
 
 func (p *PluginInput) doPluginTest(pluginName string) (output Output) {
@@ -349,21 +354,21 @@ func (p *PluginInput) doPluginTest(pluginName string) (output Output) {
 	output.print("plugin_name", pluginName)
 	output.printJson("input", json.RawMessage(p.marshalPluginInput()))
 
-	outputBytes, err, time := p.executePlugin(pluginName)
-	if err != nil {
+	pluginOutput := p.executePlugin(pluginName)
+	if pluginOutput.err != nil {
 		output.print("result", "error")
-		output.print("error", fmt.Sprint(err))
-		output.printArbitrary("output", string(outputBytes))
+		output.print("error", fmt.Sprint(pluginOutput.err))
+		output.printArbitrary("output", string(pluginOutput.outputBytes))
 		output.print("description", "error executing the plugin")
 		exitCode = 3
 		return
 	}
 
-	output.printJson("output", byteToRawMessage(outputBytes))
-	output.print("time", time)
+	output.printJson("output", byteToRawMessage(pluginOutput.outputBytes))
+	output.print("time", pluginOutput.duration)
 
 	var pluginOutputInterface interface{}
-	err = json.Unmarshal(outputBytes, &pluginOutputInterface)
+	err := json.Unmarshal(pluginOutput.outputBytes, &pluginOutputInterface)
 	if err != nil {
 		output.print("result", "error")
 		output.print("description", "error processing the output of the plugin")
@@ -495,10 +500,10 @@ func main() {
 		defaultPluginInput.generateUserID()
 		defaultPluginInput.validate()
 
-		output, _, _ := defaultPluginInput.executePlugin(*pluginGenerateName)
+		pluginOutput := defaultPluginInput.executePlugin(*pluginGenerateName)
 
 		m := map[string]interface{}{}
-		err := json.Unmarshal(output, &m)
+		err := json.Unmarshal(pluginOutput.outputBytes, &m)
 		check(err, 1, "foo")
 		confParams := m["conf_params"].([]interface{})
 		
