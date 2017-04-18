@@ -33,17 +33,22 @@ var (
 	exitCodeInternalError        = 3
 	exitCodeUserError            = 4
 
-	app                               = kingpin.New("watts-plugin-tester", "Test tool for watts plugins")
-	pluginTestAction                  = app.Flag("plugin-action", "The plugin action to be tested. Defaults to \"parameter\"").Default("parameter").Short('a').String()
-	pluginInputOverride               = app.Flag("json-file", "Use an user provided json file to override the default one").Short('j').String()
-	pluginInputOverrideString         = app.Flag("json", "Use an user provided json string to override the default one").String()
-	pluginInputConfOverride           = app.Flag("config", "Use the config parameters from the provided watts config. Specify the config-identifier!").Short('c').String()
-	pluginInputConfOverrideIdentifier = app.Flag("config-identifier", "Plugin identifier for identifying the plugin in the watts config").Short('i').String()
-	machineReadable                   = app.Flag("machine", "Be machine readable (all output will be json)").Short('m').Bool()
-	useEnvForParameterPass            = app.Flag("env", "Use this environment variable to pass the plugin input to the plugin").Short('e').Bool()
-	envVarForParameterPass            = app.Flag("env-var", "This environment variable is used to pass the plugin input to the plugin. Defaults to WATTS_PARAMETER").Default("WATTS_PARAMETER").String()
+	app          = kingpin.New("watts-plugin-tester", "Test tool for watts plugins")
+	pluginAction = app.Flag("plugin-action", "The plugin action to run the plugin with").Default("parameter").Short('a').String()
 
-	pluginTest     = app.Command("test", "Test a plugin")
+	inputComplementFile   = app.Flag("json-file", "Complement the plugin input with a json file").Short('j').String()
+	inputComplementString = app.Flag("json", "Complement the plugin input with a json object (provided as a string)").String()
+	inputComplementConf   = app.Flag("config", "Complement the plugin input with the config parameters from a watts config").Short('c').String()
+	inputComplementConfId = app.Flag("config-identifier", "Service ID for the watts config").Short('i').String()
+
+	machineReadable        = app.Flag("machine", "Be machine readable (all output will be json)").Short('m').Bool()
+	useEnvForParameterPass = app.Flag("env", "Use this environment variable to pass the plugin input to the plugin").Short('e').Bool()
+	envVarForParameterPass = app.Flag("env-var", "This environment variable is used to pass the plugin input to the plugin").Default("WATTS_PARAMETER").String()
+
+	pluginCheck     = app.Command("check", "Check a plugin against the inbuilt typed schema")
+	pluginCheckName = pluginCheck.Arg("pluginName", "Name of the plugin to check").Required().String()
+
+	pluginTest     = app.Command("test", "Test a plugin against the inbuilt typed schema and expected output values")
 	pluginTestName = pluginTest.Arg("pluginName", "Name of the plugin to test").Required().String()
 
 	printDefault     = app.Command("default", "Print the default plugin input as json")
@@ -260,13 +265,13 @@ func (p *PluginInput) marshalPluginInput() (s []byte) {
 func (p *PluginInput) specifyPluginInput() {
 
 	// merge a user provided watts config
-	if *pluginInputConfOverride != "" {
-		if *pluginInputConfOverrideIdentifier != "" {
-			fileContent, err := ioutil.ReadFile(*pluginInputConfOverride)
+	if *inputComplementConf != "" {
+		if *inputComplementConfId != "" {
+			fileContent, err := ioutil.ReadFile(*inputComplementConf)
 			check(err, exitCodeUserError, "")
 
 			regex := fmt.Sprintf("service.%s.plugin.(?P<key>.+) = (?P<value>.+)\n",
-				*pluginInputConfOverrideIdentifier)
+				*inputComplementConfId)
 			configExtractor, err := regexp.Compile(regex)
 			check(err, exitCodeInternalError, "")
 
@@ -284,7 +289,7 @@ func (p *PluginInput) specifyPluginInput() {
 				defaultConfParams = json.RawMessage(confParamsJson)
 			} else {
 				app.Errorf("Could not find configuration parameters for '%s' in '%s'",
-					*pluginInputConfOverrideIdentifier, *pluginInputConfOverride)
+					*inputComplementConfId, *inputComplementConf)
 				os.Exit(exitCodeUserError)
 			}
 
@@ -293,12 +298,12 @@ func (p *PluginInput) specifyPluginInput() {
 			os.Exit(exitCodeUserError)
 		}
 	}
-	
+
 	// merge a user provided json string
-	if *pluginInputOverrideString != "" {
+	if *inputComplementString != "" {
 
 		overridePluginInput := PluginInput{}
-		err := json.Unmarshal([]byte(*pluginInputOverrideString), &overridePluginInput)
+		err := json.Unmarshal([]byte(*inputComplementString), &overridePluginInput)
 		check(err, exitCodeUserError, "on unmarshaling user provided json")
 
 		err = mergo.Merge(&overridePluginInput, p)
@@ -309,8 +314,8 @@ func (p *PluginInput) specifyPluginInput() {
 	}
 
 	// merge a user provided json file
-	if *pluginInputOverride != "" {
-		overrideBytes, err := ioutil.ReadFile(*pluginInputOverride)
+	if *inputComplementFile != "" {
+		overrideBytes, err := ioutil.ReadFile(*inputComplementFile)
 		check(err, exitCodeUserError, "")
 
 		overridePluginInput := PluginInput{}
@@ -362,7 +367,7 @@ func (p *PluginInput) executePlugin(pluginName string) (output PluginOutput) {
 	return PluginOutput{outputBytes, err, duration}
 }
 
-func (p *PluginInput) doPluginTest(pluginName string) (output Output) {
+func (p *PluginInput) checkPlugin(pluginName string) (output Output) {
 	output = Output{}
 
 	output.print("plugin_name", pluginName)
@@ -391,7 +396,7 @@ func (p *PluginInput) doPluginTest(pluginName string) (output Output) {
 		return
 	}
 
-	path, err := wattsSchemes[p.version()][*pluginTestAction].Validate(pluginOutputInterface)
+	path, err := wattsSchemes[p.version()][*pluginAction].Validate(pluginOutputInterface)
 	if err != nil {
 		output.print("result", "error")
 		output.print("description", fmt.Sprintf("validation error %s", err))
@@ -495,17 +500,17 @@ func main() {
 	app.Version("0.4.0")
 
 	switch kingpin.MustParse(app.Parse(os.Args[1:])) {
-	case pluginTest.FullCommand():
-		validatePluginAction(*pluginTestAction)
+	case pluginCheck.FullCommand():
+		validatePluginAction(*pluginAction)
 
 		defaultPluginInput.specifyPluginInput()
-		defaultAction = toRawJsonString(*pluginTestAction)
+		defaultAction = toRawJsonString(*pluginAction)
 		defaultPluginInput["action"] = &defaultAction
 
 		defaultPluginInput.generateUserID()
 		defaultPluginInput.validate()
 
-		fmt.Printf("%s", defaultPluginInput.doPluginTest(*pluginTestName))
+		fmt.Printf("%s", defaultPluginInput.checkPlugin(*pluginCheckName))
 
 	case generateDefault.FullCommand():
 		defaultPluginInput.specifyPluginInput()
