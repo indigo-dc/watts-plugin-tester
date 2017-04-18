@@ -30,3 +30,5 @@ watts-plugin-tester
 watts-plugin-tester_container*.tar
 src
 pkg
+
+test_results.json
