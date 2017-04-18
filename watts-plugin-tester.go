@@ -17,14 +17,14 @@ import (
 	"time"
 )
 
-type PluginInput map[string](*json.RawMessage)
-type PluginOutput struct {
+type pluginInput map[string](*json.RawMessage)
+type pluginOutput struct {
 	outputBytes []byte
 	err         error
 	duration    string
 }
 
-type Output map[string](*json.RawMessage)
+type globalOutput map[string](*json.RawMessage)
 
 var (
 	exitCode                     = 0
@@ -39,7 +39,7 @@ var (
 	inputComplementFile   = app.Flag("json-file", "Complement the plugin input with a json file").Short('j').String()
 	inputComplementString = app.Flag("json", "Complement the plugin input with a json object (provided as a string)").String()
 	inputComplementConf   = app.Flag("config", "Complement the plugin input with the config parameters from a watts config").Short('c').String()
-	inputComplementConfId = app.Flag("config-identifier", "Service ID for the watts config").Short('i').String()
+	inputComplementConfID = app.Flag("config-identifier", "Service ID for the watts config").Short('i').String()
 
 	machineReadable        = app.Flag("machine", "Be machine readable (all output will be json)").Short('m').Bool()
 	useEnvForParameterPass = app.Flag("env", "Use this environment variable to pass the plugin input to the plugin").Short('e').Bool()
@@ -65,20 +65,21 @@ var (
 	outputIndentation = "                 "
 	outputTabWidth    = "    "
 
-	defaultWattsVersion     = json.RawMessage(`"1.0.0"`)
-	defaultCredentialState  = json.RawMessage(`"undefined"`)
-	defaultConfParams       = json.RawMessage(`{}`)
-	defaultParams           = json.RawMessage(`{}`)
-	defaultAdditionalLogins = json.RawMessage(`[]`)
-	defaultUserInfo         = json.RawMessage(`{
+	defaultwattVersionString = "1.0.0"
+	defaultWattsVersion      = toRawJSONString(defaultwattVersionString)
+	defaultCredentialState   = toRawJSONString("undefined")
+	defaultConfParams        = json.RawMessage(`{}`)
+	defaultParams            = json.RawMessage(`{}`)
+	defaultAdditionalLogins  = json.RawMessage(`[]`)
+	defaultUserInfo          = json.RawMessage(`{
 		"iss": "https://issuer.example.com",
 		"sub": "123456789"
 	}`)
 
 	defaultAction      = json.RawMessage(`"parameter"`)
-	defaultWattsUserId = json.RawMessage(``)
+	defaultWattsUserID = json.RawMessage(``)
 
-	defaultPluginInput = PluginInput{
+	defaultPluginInput = pluginInput{
 		"watts_version":     &defaultWattsVersion,
 		"cred_state":        &defaultCredentialState,
 		"conf_params":       &defaultConfParams,
@@ -210,21 +211,22 @@ func validatePluginAction(action string) {
 	}
 }
 
-func (p *PluginInput) validate() {
+func (p *pluginInput) validate() {
 	var bs []byte
 	var i interface{}
 
 	bs, err := json.MarshalIndent(p, outputIndentation, outputTabWidth)
 	check(err, exitCodeInternalError, "marshal error")
 
-	json.Unmarshal(bs, &i)
+	err = json.Unmarshal(bs, &i)
+	check(err, exitCodeInternalError, "unmarshal error")
 	path, err := pluginInputScheme.Validate(i)
 
 	if err != nil {
 		app.Errorf("Unable to validate plugin input")
-		fmt.Sprintf("%s: %s\n", "Plugin Input", bs)
-		fmt.Sprintf("%s: %s\n", "Error", err)
-		fmt.Sprintf("%s: %s\n", "Path", path)
+		fmt.Printf("%s: %s\n", "Plugin Input", bs)
+		fmt.Printf("%s: %s\n", "Error", err)
+		fmt.Printf("%s: %s\n", "Path", path)
 		os.Exit(exitCodePluginError)
 	} else {
 		if *validateSpecific || *validateDefault {
@@ -235,43 +237,43 @@ func (p *PluginInput) validate() {
 	return
 }
 
-func (p *PluginInput) generateUserID() {
-	userIdJson := map[string](*json.RawMessage){}
-	userIdJsonReduced := map[string](*json.RawMessage){}
+func (p *pluginInput) generateUserID() {
+	userIDJSON := map[string](*json.RawMessage){}
+	userIDJSONReduced := map[string](*json.RawMessage){}
 
 	userInfo := *(*p)["user_info"]
 
-	err := json.Unmarshal(userInfo, &userIdJson)
+	err := json.Unmarshal(userInfo, &userIDJSON)
 	check(err, exitCodeInternalError, "Error unmarshaling watts_userid")
 
-	userIdJsonReduced["issuer"] = userIdJson["iss"]
-	userIdJsonReduced["subject"] = userIdJson["sub"]
+	userIDJSONReduced["issuer"] = userIDJSON["iss"]
+	userIDJSONReduced["subject"] = userIDJSON["sub"]
 
-	j, err := json.Marshal(userIdJsonReduced)
+	j, err := json.Marshal(userIDJSONReduced)
 	check(err, exitCodeInternalError, "")
 
 	escaped := bytes.Replace(j, []byte{'/'}, []byte{'\\', '/'}, -1)
-	defaultWattsUserId = toRawJsonString(base64url.Encode(escaped))
-	(*p)["watts_userid"] = &defaultWattsUserId
+	defaultWattsUserID = toRawJSONString(base64url.Encode(escaped))
+	(*p)["watts_userid"] = &defaultWattsUserID
 	return
 }
 
-func (p *PluginInput) marshalPluginInput() (s []byte) {
+func (p *pluginInput) marshalPluginInput() (s []byte) {
 	s, err := json.MarshalIndent(*p, outputTabWidth, outputTabWidth)
 	check(err, exitCodeInternalError, fmt.Sprintf("unable to marshal '%s'", s))
 	return
 }
 
-func (p *PluginInput) specifyPluginInput() {
+func (p *pluginInput) specifyPluginInput() {
 
 	// merge a user provided watts config
 	if *inputComplementConf != "" {
-		if *inputComplementConfId != "" {
+		if *inputComplementConfID != "" {
 			fileContent, err := ioutil.ReadFile(*inputComplementConf)
 			check(err, exitCodeUserError, "")
 
 			regex := fmt.Sprintf("service.%s.plugin.(?P<key>.+) = (?P<value>.+)\n",
-				*inputComplementConfId)
+				*inputComplementConfID)
 			configExtractor, err := regexp.Compile(regex)
 			check(err, exitCodeInternalError, "")
 
@@ -283,13 +285,13 @@ func (p *PluginInput) specifyPluginInput() {
 					confParams[string(matches[i][1])] = string(matches[i][2])
 				}
 
-				confParamsJson, err := json.Marshal(confParams)
+				confParamsJSON, err := json.Marshal(confParams)
 				check(err, exitCodeInternalError, "Formatting conf parameters")
 
-				defaultConfParams = json.RawMessage(confParamsJson)
+				defaultConfParams = json.RawMessage(confParamsJSON)
 			} else {
 				app.Errorf("Could not find configuration parameters for '%s' in '%s'",
-					*inputComplementConfId, *inputComplementConf)
+					*inputComplementConfID, *inputComplementConf)
 				os.Exit(exitCodeUserError)
 			}
 
@@ -302,7 +304,7 @@ func (p *PluginInput) specifyPluginInput() {
 	// merge a user provided json string
 	if *inputComplementString != "" {
 
-		overridePluginInput := PluginInput{}
+		overridePluginInput := pluginInput{}
 		err := json.Unmarshal([]byte(*inputComplementString), &overridePluginInput)
 		check(err, exitCodeUserError, "on unmarshaling user provided json")
 
@@ -318,7 +320,7 @@ func (p *PluginInput) specifyPluginInput() {
 		overrideBytes, err := ioutil.ReadFile(*inputComplementFile)
 		check(err, exitCodeUserError, "")
 
-		overridePluginInput := PluginInput{}
+		overridePluginInput := pluginInput{}
 		err = json.Unmarshal(overrideBytes, &overridePluginInput)
 		check(err, exitCodeUserError, "on unmarshaling user provided json file")
 
@@ -330,9 +332,9 @@ func (p *PluginInput) specifyPluginInput() {
 	}
 }
 
-func (p *PluginInput) version() (version string) {
-	versionJson := (*p)["watts_version"]
-	versionBytes, err := json.Marshal(&versionJson)
+func (p *pluginInput) version() (version string) {
+	versionJSON := (*p)["watts_version"]
+	versionBytes, err := json.Marshal(&versionJSON)
 	check(err, exitCodeInternalError, "")
 
 	versionExtractor, _ := regexp.Compile("[^\"+v]+")
@@ -347,9 +349,9 @@ func (p *PluginInput) version() (version string) {
 	return
 }
 
-func (p *PluginInput) executePlugin(pluginName string) (output PluginOutput) {
-	pluginInputJson := p.marshalPluginInput()
-	inputBase64 := base64.StdEncoding.EncodeToString(pluginInputJson)
+func (p *pluginInput) executePlugin(pluginName string) (output pluginOutput) {
+	pluginInputJSON := p.marshalPluginInput()
+	inputBase64 := base64.StdEncoding.EncodeToString(pluginInputJSON)
 
 	var cmd *exec.Cmd
 	if *useEnvForParameterPass {
@@ -364,14 +366,14 @@ func (p *PluginInput) executePlugin(pluginName string) (output PluginOutput) {
 	timeAfterExec := time.Now()
 	duration := fmt.Sprintf("%s", timeAfterExec.Sub(timeBeforeExec))
 
-	return PluginOutput{outputBytes, err, duration}
+	return pluginOutput{outputBytes, err, duration}
 }
 
-func (p *PluginInput) checkPlugin(pluginName string) (output Output) {
-	output = Output{}
+func (p *pluginInput) checkPlugin(pluginName string) (output globalOutput) {
+	output = globalOutput{}
 
 	output.print("plugin_name", pluginName)
-	output.printJson("input", json.RawMessage(p.marshalPluginInput()))
+	output.printJSON("input", json.RawMessage(p.marshalPluginInput()))
 
 	pluginOutput := p.executePlugin(pluginName)
 	if pluginOutput.err != nil {
@@ -383,7 +385,7 @@ func (p *PluginInput) checkPlugin(pluginName string) (output Output) {
 		return
 	}
 
-	output.printJson("output", byteToRawMessage(pluginOutput.outputBytes))
+	output.printJSON("output", byteToRawMessage(pluginOutput.outputBytes))
 	output.print("time", pluginOutput.duration)
 
 	var pluginOutputInterface interface{}
@@ -403,15 +405,14 @@ func (p *PluginInput) checkPlugin(pluginName string) (output Output) {
 		output.print("path", path)
 		exitCode = 1
 		return
-	} else {
-		output.print("result", "ok")
-		output.print("description", "validation passed")
 	}
 
+	output.print("result", "ok")
+	output.print("description", "validation passed")
 	return
 }
 
-func (o *Output) printJson(a string, b json.RawMessage) {
+func (o *globalOutput) printJSON(a string, b json.RawMessage) {
 	if !*machineReadable {
 		bs, err := json.MarshalIndent(&b, outputIndentation, outputTabWidth)
 		if err != nil {
@@ -425,28 +426,28 @@ func (o *Output) printJson(a string, b json.RawMessage) {
 	(*o)[a] = &(outputMessages[len(outputMessages)-1])
 
 }
-func (o *Output) print(a string, b string) {
+func (o *globalOutput) print(a string, b string) {
 	if !*machineReadable {
 		fmt.Printf("%15s: %s\n", a, b)
 		return
 	}
 
-	m := toRawJsonString(b)
+	m := toRawJSONString(b)
 	outputMessages = append(outputMessages, m)
 	(*o)[a] = &(outputMessages[len(outputMessages)-1])
 }
-func (o *Output) printArbitrary(a string, b string) {
+func (o *globalOutput) printArbitrary(a string, b string) {
 	if !*machineReadable {
 		fmt.Printf("%15s: %s\n", a, b)
 		return
 	}
 
-	m := toRawJsonString(escapeJsonString(b))
+	m := toRawJSONString(escapeJSONString(b))
 	outputMessages = append(outputMessages, m)
 	(*o)[a] = &(outputMessages[len(outputMessages)-1])
 }
 
-func (o Output) String() string {
+func (o globalOutput) String() string {
 	if !*machineReadable {
 		return ""
 	}
@@ -454,12 +455,12 @@ func (o Output) String() string {
 	bs, err := json.MarshalIndent(&o, "", outputTabWidth)
 	if err != nil {
 		return fmt.Sprintf("error producing machine readable output: %s\n", err)
-	} else {
-		return fmt.Sprintf("%s", string(bs))
 	}
+
+	return fmt.Sprintf("%s", string(bs))
 }
 
-func (o *Output) toDefaultJson() {
+func (o *globalOutput) toDefaultJSON() {
 	fmt.Printf("%s %T", (*o), (*o))
 	return
 }
@@ -467,26 +468,26 @@ func (o *Output) toDefaultJson() {
 func byteToRawMessage(inputBytes []byte) (rawMessage json.RawMessage) {
 	rawMessage = json.RawMessage(``)
 
-	testJsonObject := map[string]interface{}{}
-	err := json.Unmarshal(inputBytes, &testJsonObject)
+	testJSONObject := map[string]interface{}{}
+	err := json.Unmarshal(inputBytes, &testJSONObject)
 	if err != nil {
-		rawMessage = toRawJsonString(escapeJsonString(string(inputBytes)))
+		rawMessage = toRawJSONString(escapeJSONString(string(inputBytes)))
 	} else {
 		err = json.Unmarshal(inputBytes, &rawMessage)
 		if err != nil {
 			app.Errorf("unmarshal successful, but bad json conversion: '%s'\n", string(inputBytes))
-			rawMessage = toRawJsonString("got erroneous output")
+			rawMessage = toRawJSONString("got erroneous output")
 		}
 	}
 	return
 }
 
-func toRawJsonString(str string) (jo json.RawMessage) {
+func toRawJSONString(str string) (jo json.RawMessage) {
 	jo = json.RawMessage(fmt.Sprintf("\"%s\"", str))
 	return
 }
 
-func escapeJsonString(s string) (e string) {
+func escapeJSONString(s string) (e string) {
 	e = strings.Replace(s, "\n", "", -1)
 	e = strings.Replace(e, "\"", "\\\"", -1)
 	return
@@ -504,7 +505,7 @@ func main() {
 		validatePluginAction(*pluginAction)
 
 		defaultPluginInput.specifyPluginInput()
-		defaultAction = toRawJsonString(*pluginAction)
+		defaultAction = toRawJSONString(*pluginAction)
 		defaultPluginInput["action"] = &defaultAction
 
 		defaultPluginInput.generateUserID()
