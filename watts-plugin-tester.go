@@ -316,7 +316,7 @@ func (p *PluginInput) version() (version string) {
 	versionBytes, err := json.Marshal(&versionJson)
 	check(err, exitCodeInternalError, "")
 
-	versionExtractor, _ := regexp.Compile("[^\"+]+")
+	versionExtractor, _ := regexp.Compile("[^\"+v]+")
 	extractedVersion := versionExtractor.Find(versionBytes)
 
 	if _, versionFound := wattsSchemes[string(extractedVersion)]; !versionFound {
