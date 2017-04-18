@@ -20,8 +20,8 @@ import (
 type PluginInput map[string](*json.RawMessage)
 type PluginOutput struct {
 	outputBytes []byte
-	err	error
-	duration string
+	err         error
+	duration    string
 }
 
 type Output map[string](*json.RawMessage)
@@ -35,7 +35,8 @@ var (
 
 	app                               = kingpin.New("watts-plugin-tester", "Test tool for watts plugins")
 	pluginTestAction                  = app.Flag("plugin-action", "The plugin action to be tested. Defaults to \"parameter\"").Default("parameter").Short('a').String()
-	pluginInputOverride               = app.Flag("json", "Use an user provided json file to override the default one").Short('j').String()
+	pluginInputOverride               = app.Flag("json-file", "Use an user provided json file to override the default one").Short('j').String()
+	pluginInputOverrideString         = app.Flag("json", "Use an user provided json string to override the default one").String()
 	pluginInputConfOverride           = app.Flag("config", "Use the config parameters from the provided watts config. Specify the config-identifier!").Short('c').String()
 	pluginInputConfOverrideIdentifier = app.Flag("config-identifier", "Plugin identifier for identifying the plugin in the watts config").Short('i').String()
 	machineReadable                   = app.Flag("machine", "Be machine readable (all output will be json)").Short('m').Bool()
@@ -50,9 +51,8 @@ var (
 	printSpecific    = app.Command("specific", "Print the plugin input (including the user override) as json")
 	validateSpecific = printSpecific.Flag("validate", "Validate the produced json").Short('v').Bool()
 
-	generateDefault  = app.Command("generate", "Generate a fitting json input file for the given plugin")
+	generateDefault    = app.Command("generate", "Generate a fitting json input file for the given plugin")
 	pluginGenerateName = generateDefault.Arg("pluginName", "Name of the plugin to generate a default json for").Required().String()
-
 
 	outputMessages = []json.RawMessage{}
 
@@ -252,7 +252,7 @@ func (p *PluginInput) generateUserID() {
 }
 
 func (p *PluginInput) marshalPluginInput() (s []byte) {
-	s, err := json.MarshalIndent(*p, outputIndentation, outputTabWidth)
+	s, err := json.MarshalIndent(*p, outputTabWidth, outputTabWidth)
 	check(err, exitCodeInternalError, fmt.Sprintf("unable to marshal '%s'", s))
 	return
 }
@@ -293,6 +293,20 @@ func (p *PluginInput) specifyPluginInput() {
 			os.Exit(exitCodeUserError)
 		}
 	}
+	
+	// merge a user provided json string
+	if *pluginInputOverrideString != "" {
+
+		overridePluginInput := PluginInput{}
+		err := json.Unmarshal([]byte(*pluginInputOverrideString), &overridePluginInput)
+		check(err, exitCodeUserError, "on unmarshaling user provided json")
+
+		err = mergo.Merge(&overridePluginInput, p)
+		check(err, exitCodeInternalError, "on merging user provided json")
+
+		*p = overridePluginInput
+		return
+	}
 
 	// merge a user provided json file
 	if *pluginInputOverride != "" {
@@ -301,10 +315,10 @@ func (p *PluginInput) specifyPluginInput() {
 
 		overridePluginInput := PluginInput{}
 		err = json.Unmarshal(overrideBytes, &overridePluginInput)
-		check(err, exitCodeUserError, "on unmarshaling user provided json")
+		check(err, exitCodeUserError, "on unmarshaling user provided json file")
 
 		err = mergo.Merge(&overridePluginInput, p)
-		check(err, exitCodeInternalError, "on merging user provided json")
+		check(err, exitCodeInternalError, "on merging user provided json file")
 
 		*p = overridePluginInput
 		return
@@ -506,8 +520,8 @@ func main() {
 		err := json.Unmarshal(pluginOutput.outputBytes, &m)
 		check(err, 1, "foo")
 		confParams := m["conf_params"].([]interface{})
-		
-		generatedConfig := map[string](interface{}) {}
+
+		generatedConfig := map[string](interface{}){}
 		for _, v := range confParams {
 			mm := v.(map[string]interface{})
 			generatedConfig[mm["name"].(string)] = mm["default"].(string)
