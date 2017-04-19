@@ -1,10 +1,21 @@
 watts-plugin-tester
 ====
 
+build
+---
+```
+go get   github.com/indigo-dc/watts-plugin-tester
+go build github.com/indigo-dc/watts-plugin-tester
+(with a set GOPATH)
+```
+or
+```
+utils/compile.sh
+```
+
 get started
 ---
 ```
-utils/compile.sh
 ./watts-plugin-tester --help
 ```
 
