@@ -18,14 +18,9 @@ import (
 )
 
 type pluginInput map[string](*json.RawMessage)
-type pluginOutput struct {
-	outputBytes []byte
-	err         error
-	duration    string
-}
-
-type globalOutput map[string](*json.RawMessage)
+type pluginOutput interface{}
 type pluginOutputJSON map[string]interface{}
+type globalOutput map[string](*json.RawMessage)
 
 var (
 	exitCode                     = 0
@@ -243,10 +238,13 @@ func (p *pluginInput) version() (version string) {
 	return
 }
 
-func (p *pluginInput) executePlugin(pluginName string) (output pluginOutput) {
+func (o *globalOutput) executePlugin(pluginName string, p *pluginInput) (po pluginOutput) {
 	checkFileExistence(pluginName)
 	pluginInputJSON := p.marshalPluginInput()
 	inputBase64 := base64.StdEncoding.EncodeToString(pluginInputJSON)
+
+	o.print("plugin_name", pluginName)
+	o.printJSON("plugin_input", json.RawMessage(pluginInputJSON))
 
 	var cmd *exec.Cmd
 	if *useEnvForParameterPass {
@@ -261,53 +259,48 @@ func (p *pluginInput) executePlugin(pluginName string) (output pluginOutput) {
 	timeAfterExec := time.Now()
 	duration := fmt.Sprintf("%s", timeAfterExec.Sub(timeBeforeExec))
 
-	return pluginOutput{outputBytes, err, duration}
-}
-
-func (p *pluginInput) checkPlugin(pluginName string) (output globalOutput) {
-	output = globalOutput{}
-
-	output.print("plugin_name", pluginName)
-	output.printJSON("plugin_input", json.RawMessage(p.marshalPluginInput()))
-
-	pluginOutput := p.executePlugin(pluginName)
-	if pluginOutput.err != nil {
-		output.print("result", "error")
-		output.print("error", fmt.Sprint(pluginOutput.err))
-		output.printArbitrary("output", string(pluginOutput.outputBytes))
-		output.print("description", "error executing the plugin")
+	if err != nil {
+		o.print("result", "error")
+		o.print("error", fmt.Sprint(err))
+		o.printArbitrary("plugin_output", string(outputBytes))
+		o.print("description", "error executing the plugin")
 		exitCode = 3
 		return
 	}
 
-	output.printJSON("plugin_output", byteToRawMessage(pluginOutput.outputBytes))
-	output.print("plugin_time", pluginOutput.duration)
+	o.printJSON("plugin_output", byteToRawMessage(outputBytes))
+	o.print("plugin_time", duration)
 
-	var pluginOutputInterface interface{}
-	err := json.Unmarshal(pluginOutput.outputBytes, &pluginOutputInterface)
+	err = json.Unmarshal(outputBytes, &po)
 	if err != nil {
-		output.print("result", "error")
-		output.print("description", "error processing the output of the plugin")
-		output.printArbitrary("error", fmt.Sprintf("%s", err))
+		o.print("result", "error")
+		o.print("description", "error processing the output of the plugin")
+		o.printArbitrary("error", fmt.Sprintf("%s", err))
+		exitCode = 1
+		return
+	}
+	return
+}
+
+func (o *globalOutput) checkPluginOutput(po pluginOutput, pi *pluginInput) {
+	var action, version string
+
+	err := json.Unmarshal(*(*pi)["action"], &action)
+	check(err, exitCodeInternalError, "checkPluginOutput")
+
+	version = pi.version()
+
+	path, err := schemes.WattsSchemes[version][action].Validate(po)
+	if err != nil {
+		o.print("result", "error")
+		o.print("description", fmt.Sprintf("validation error %s", err))
+		o.print("path", path)
 		exitCode = 1
 		return
 	}
 
-	pluginAction := ""
-	err = json.Unmarshal(*(*p)["action"], &pluginAction)
-	check(err, exitCodeInternalError, "action")
-
-	path, err := schemes.WattsSchemes[p.version()][pluginAction].Validate(pluginOutputInterface)
-	if err != nil {
-		output.print("result", "error")
-		output.print("description", fmt.Sprintf("validation error %s", err))
-		output.print("path", path)
-		exitCode = 1
-		return
-	}
-
-	output.print("result", "ok")
-	output.print("description", "validation passed")
+	o.print("result", "ok")
+	o.print("description", "validation passed")
 	return
 }
 
@@ -349,16 +342,11 @@ func (o *globalOutput) printArbitrary(a string, b string) {
 	(*o)[a] = &(outputMessages[len(outputMessages)-1])
 }
 
-func (o *globalOutput) testOutputAgainst(expectedOutput pluginOutputJSON) {
+func (o *globalOutput) testOutputAgainst(po pluginOutput, expectedOutput pluginOutputJSON) {
 	bs := marshal(expectedOutput)
 
 	o.printJSON("plugin_output_expected", json.RawMessage(bs))
-
-	po := (*o)["plugin_output"]
-	poj := pluginOutputJSON{}
-	err := json.Unmarshal(*po, &poj)
-	check(err, exitCodeInternalError, "testOutputAgainst")
-
+	poj := po.(pluginOutputJSON)
 	for i, v := range expectedOutput {
 		if o := poj[i]; o != v {
 			app.Errorf("Unexpected output for key %s: '%s' instead of '%s'", i, o, v)
@@ -433,12 +421,9 @@ func escapeJSONString(s string) (e string) {
 	return
 }
 
-func generateConfParams(pluginName string) (confParams json.RawMessage) {
-	pluginOutput := defaultPluginInput.executePlugin(pluginName)
-
-	m := map[string]interface{}{}
-	err := json.Unmarshal(pluginOutput.outputBytes, &m)
-	check(err, 1, "unmarshal")
+func (o *globalOutput) generateConfParams(pluginName string) (confParams json.RawMessage) {
+	po := o.executePlugin(pluginName, &defaultPluginInput)
+	m := po.(map[string]interface{})
 	confParamsInterface := m["conf_params"].([]interface{})
 
 	generatedConfig := map[string](interface{}){}
@@ -502,19 +487,28 @@ func main() {
 	switch kingpin.MustParse(app.Parse(os.Args[1:])) {
 	case pluginCheck.FullCommand():
 		defaultPluginInput.specifyPluginInput()
-		fmt.Printf("%s", defaultPluginInput.checkPlugin(*pluginName))
+		g := globalOutput{}
+		po := g.executePlugin(*pluginName, &defaultPluginInput)
+		g.checkPluginOutput(po, &defaultPluginInput)
+		fmt.Printf("%s", g)
 
 	case pluginTest.FullCommand():
 		*machineReadable = true
-		expectedOutput := getExpectedOutput()
+		eo := getExpectedOutput()
 		defaultPluginInput.specifyPluginInput()
-		checkOutput := defaultPluginInput.checkPlugin(*pluginName)
-		checkOutput.testOutputAgainst(expectedOutput)
+			
+		g := globalOutput{}
+		po := g.executePlugin(*pluginName, &defaultPluginInput)
+		g.checkPluginOutput(po, &defaultPluginInput)
+		g.testOutputAgainst(po, eo)
+
+		fmt.Printf("%s", g)
 
 	case generateDefault.FullCommand():
 		*machineReadable = true
 		defaultPluginInput.specifyPluginInput()
-		defaultConfParams = generateConfParams(*pluginName)
+		g := globalOutput{}
+		defaultConfParams = g.generateConfParams(*pluginName)
 		defaultPluginInput.validate()
 		fmt.Printf("%s", defaultPluginInput)
 
