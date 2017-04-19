@@ -61,7 +61,7 @@ var (
 
 	outputMessages = []json.RawMessage{}
 
-	// for MarshalIndent
+	// for marshalIndent
 	outputIndentation = "                 "
 	outputTabWidth    = "    "
 
@@ -204,13 +204,10 @@ func merge(dest *pluginInput, src *pluginInput) {
 }
 
 func (p *pluginInput) validate() {
-	var bs []byte
 	var i interface{}
 
-	bs, err := json.MarshalIndent(p, outputIndentation, outputTabWidth)
-	check(err, exitCodeInternalError, "marshal error")
-
-	err = json.Unmarshal(bs, &i)
+	bs := marshalIndent(p)
+	err := json.Unmarshal(bs, &i)
 	check(err, exitCodeInternalError, "unmarshal error")
 	path, err := pluginInputScheme.Validate(i)
 
@@ -262,8 +259,7 @@ func (p *pluginInput) setPluginAction() {
 }
 
 func (p *pluginInput) marshalPluginInput() (s []byte) {
-	s, err := json.MarshalIndent(*p, outputTabWidth, outputTabWidth)
-	check(err, exitCodeInternalError, fmt.Sprintf("unable to marshal '%s'", s))
+	s = marshalIndent(*p)
 	return
 }
 
@@ -453,6 +449,20 @@ func (o *globalOutput) toDefaultJSON() {
 }
 
 func (o *globalOutput) testOutputAgainst(expectedOutput pluginOutputJSON) {
+	fmt.Printf("Testing plugin output against:\n%s", marshalIndent(expectedOutput))
+	po := (*o)["output"]
+	poj := pluginOutputJSON{}
+	err := json.Unmarshal(*po, &poj)
+	check(err, exitCodeInternalError, "testOutputAgainst")
+
+	for i,v := range(expectedOutput) {
+		if o := poj[i]; o != v {
+			app.Errorf("Unexpected output for key %s: '%s' instead of '%s'", i, o, v)
+			os.Exit(exitCodePluginError)
+		}
+	}	
+
+	fmt.Printf("Test passed. All output as expected\n")
 	return
 }
 
@@ -461,11 +471,7 @@ func (o globalOutput) String() string {
 		return ""
 	}
 
-	bs, err := json.MarshalIndent(&o, "", outputTabWidth)
-	if err != nil {
-		return fmt.Sprintf("error producing machine readable output: %s\n", err)
-	}
-
+	bs := marshalIndent(&o)
 	return fmt.Sprintf("%s", string(bs))
 }
 
@@ -577,6 +583,12 @@ func getExpectedOutput() (m pluginOutputJSON) {
 	return
 }
 
+func marshalIndent(i interface{}) (bytes []byte) {
+	bytes, err := json.MarshalIndent(i, outputIndentation, outputTabWidth)
+	check(err, exitCodeInternalError, "marshalIndent")
+	return bytes
+}
+
 func main() {
 	app.Author("Lukas Burgey @ KIT within the INDIGO DataCloud Project")
 	app.Version("0.4.0")
@@ -593,6 +605,7 @@ func main() {
 		checkOutput.testOutputAgainst(expectedOutput)
 
 	case generateDefault.FullCommand():
+		*machineReadable = true
 		defaultPluginInput.specifyPluginInput()
 		defaultConfParams = generateConfParams(*pluginName)
 		defaultPluginInput.validate()
