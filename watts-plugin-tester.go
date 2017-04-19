@@ -300,16 +300,16 @@ func (p *pluginInput) specifyPluginInput() {
 		}
 	}
 
-	// merge a user provided json string
-	if *inputComplementString != "" {
-		overridePluginInput := jsonStringToPluginInput(*inputComplementString)
+	// merge a user provided json file
+	if *inputComplementFile != "" {
+		overridePluginInput := jsonFileToPluginInput(*inputComplementFile)
 		merge(&overridePluginInput, p)
 		*p = overridePluginInput
 	}
 
-	// merge a user provided json file
-	if *inputComplementFile != "" {
-		overridePluginInput := jsonFileToPluginInput(*inputComplementFile)
+	// merge a user provided json string
+	if *inputComplementString != "" {
+		overridePluginInput := jsonStringToPluginInput(*inputComplementString)
 		merge(&overridePluginInput, p)
 		*p = overridePluginInput
 	}
