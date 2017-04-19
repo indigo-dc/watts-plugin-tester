@@ -25,6 +25,7 @@ type pluginOutput struct {
 }
 
 type globalOutput map[string](*json.RawMessage)
+type pluginOutputJSON map[string]interface{}
 
 var (
 	exitCode                     = 0
@@ -540,7 +541,7 @@ func (o *globalOutput) testOutputAgainst() {
 	return
 }
 
-func jsonFileToMap(file string) (m map[string]interface{}) {
+func jsonFileToMap(file string) (m pluginOutputJSON) {
 	checkFileExistence(file)
 	overrideBytes, err := ioutil.ReadFile(file)
 	check(err, exitCodeUserError, "")
@@ -548,14 +549,14 @@ func jsonFileToMap(file string) (m map[string]interface{}) {
 	return
 }
 
-func jsonStringToMap(jsonString string) (m map[string]interface{}) {
-	m = map[string]interface{}{}
+func jsonStringToMap(jsonString string) (m pluginOutputJSON) {
+	m = pluginOutputJSON{}
 	err := json.Unmarshal([]byte(jsonString), &m)
 	check(err, exitCodeUserError, "on unmarshaling user provided json string")
 	return
 }
 
-func getExpectedOutput() (m map[string]interface{}) {
+func getExpectedOutput() (m pluginOutputJSON) {
 	if *expectedOutputFile != "" {
 		m = jsonFileToMap(*expectedOutputFile)
 	} else if *expectedOutputString != "" {
@@ -578,9 +579,6 @@ func main() {
 
 	case pluginTest.FullCommand():
 		expectedOutput := getExpectedOutput()
-		fmt.Printf("%s", expectedOutput)
-		os.Exit(exitCodeInternalError)
-
 		defaultPluginInput.specifyPluginInput()
 		checkOutput := defaultPluginInput.checkPlugin(*pluginName)
 		checkOutput.testOutputAgainst()
