@@ -449,20 +449,26 @@ func (o *globalOutput) toDefaultJSON() {
 }
 
 func (o *globalOutput) testOutputAgainst(expectedOutput pluginOutputJSON) {
-	fmt.Printf("Testing plugin output against:\n%s", marshalIndent(expectedOutput))
-	po := (*o)["output"]
-	poj := pluginOutputJSON{}
-	err := json.Unmarshal(*po, &poj)
+	bs, err := json.Marshal(expectedOutput)
 	check(err, exitCodeInternalError, "testOutputAgainst")
 
-	for i,v := range(expectedOutput) {
+	o.printJSON("output_expected", json.RawMessage(bs))
+
+	po := (*o)["output"]
+	poj := pluginOutputJSON{}
+	err = json.Unmarshal(*po, &poj)
+	check(err, exitCodeInternalError, "testOutputAgainst")
+
+	for i, v := range expectedOutput {
 		if o := poj[i]; o != v {
 			app.Errorf("Unexpected output for key %s: '%s' instead of '%s'", i, o, v)
 			os.Exit(exitCodePluginError)
 		}
-	}	
+	}
 
-	fmt.Printf("Test passed. All output as expected\n")
+	o.print("result", "ok")
+	o.print("description", "Test passed. All output as expected")
+	fmt.Println(*o)
 	return
 }
 
@@ -583,8 +589,19 @@ func getExpectedOutput() (m pluginOutputJSON) {
 	return
 }
 
+func marshal(i interface{}) (bytes []byte) {
+	bytes, err := json.Marshal(i)
+	check(err, exitCodeInternalError, "marshal")
+	return
+}
+
 func marshalIndent(i interface{}) (bytes []byte) {
-	bytes, err := json.MarshalIndent(i, outputIndentation, outputTabWidth)
+	indentation := ""
+	if !*machineReadable {
+		indentation = outputIndentation
+	}
+
+	bytes, err := json.MarshalIndent(i, indentation, outputTabWidth)
 	check(err, exitCodeInternalError, "marshalIndent")
 	return bytes
 }
@@ -599,6 +616,7 @@ func main() {
 		fmt.Printf("%s", defaultPluginInput.checkPlugin(*pluginName))
 
 	case pluginTest.FullCommand():
+		(*machineReadable) = true
 		expectedOutput := getExpectedOutput()
 		defaultPluginInput.specifyPluginInput()
 		checkOutput := defaultPluginInput.checkPlugin(*pluginName)
@@ -612,9 +630,11 @@ func main() {
 		fmt.Printf("%s", defaultPluginInput)
 
 	case printDefault.FullCommand():
+		*machineReadable = true
 		fmt.Printf("%s", defaultPluginInput)
 
 	case printSpecific.FullCommand():
+		*machineReadable = true
 		defaultPluginInput.specifyPluginInput()
 		fmt.Printf("%s", defaultPluginInput)
 	}
