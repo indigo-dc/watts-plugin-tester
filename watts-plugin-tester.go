@@ -596,7 +596,7 @@ func marshalIndent(i interface{}) (bytes []byte) {
 
 func main() {
 	app.Author("Lukas Burgey @ KIT within the INDIGO DataCloud Project")
-	app.Version("0.4.0")
+	app.Version("1.0.0")
 
 	switch kingpin.MustParse(app.Parse(os.Args[1:])) {
 	case pluginCheck.FullCommand():
