@@ -361,7 +361,7 @@ func (p *pluginInput) checkPlugin(pluginName string) (output globalOutput) {
 	output = globalOutput{}
 
 	output.print("plugin_name", pluginName)
-	output.printJSON("input", json.RawMessage(p.marshalPluginInput()))
+	output.printJSON("plugin_input", json.RawMessage(p.marshalPluginInput()))
 
 	pluginOutput := p.executePlugin(pluginName)
 	if pluginOutput.err != nil {
@@ -373,8 +373,8 @@ func (p *pluginInput) checkPlugin(pluginName string) (output globalOutput) {
 		return
 	}
 
-	output.printJSON("output", byteToRawMessage(pluginOutput.outputBytes))
-	output.print("time", pluginOutput.duration)
+	output.printJSON("plugin_output", byteToRawMessage(pluginOutput.outputBytes))
+	output.print("plugin_time", pluginOutput.duration)
 
 	var pluginOutputInterface interface{}
 	err := json.Unmarshal(pluginOutput.outputBytes, &pluginOutputInterface)
@@ -441,9 +441,9 @@ func (o *globalOutput) printArbitrary(a string, b string) {
 func (o *globalOutput) testOutputAgainst(expectedOutput pluginOutputJSON) {
 	bs := marshal(expectedOutput)
 
-	o.printJSON("output_expected", json.RawMessage(bs))
+	o.printJSON("plugin_output_expected", json.RawMessage(bs))
 
-	po := (*o)["output"]
+	po := (*o)["plugin_output"]
 	poj := pluginOutputJSON{}
 	err := json.Unmarshal(*po, &poj)
 	check(err, exitCodeInternalError, "testOutputAgainst")
