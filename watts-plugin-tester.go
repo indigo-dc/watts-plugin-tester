@@ -406,15 +406,15 @@ func (p pluginInput) String() string {
 
 func (o *globalOutput) printJSON(a string, b json.RawMessage) {
 	/*
-	if !*machineReadable {
-		bs, err := json.MarshalIndent(&b, outputIndentation, outputTabWidth)
-		if err != nil {
-			fmt.Printf("%15s: %s\n%15s\n\n", a, string(b), fmt.Sprintf("end of %s", a))
-		} else {
-			fmt.Printf("%15s: %s\n%15s\n\n", a, string(bs), fmt.Sprintf("end of %s", a))
+		if !*machineReadable {
+			bs, err := json.MarshalIndent(&b, outputIndentation, outputTabWidth)
+			if err != nil {
+				fmt.Printf("%15s: %s\n%15s\n\n", a, string(b), fmt.Sprintf("end of %s", a))
+			} else {
+				fmt.Printf("%15s: %s\n%15s\n\n", a, string(bs), fmt.Sprintf("end of %s", a))
+			}
+			return
 		}
-		return
-	}
 	*/
 	outputMessages = append(outputMessages, b)
 	(*o)[a] = &(outputMessages[len(outputMessages)-1])
@@ -464,14 +464,14 @@ func (o *globalOutput) testOutputAgainst(expectedOutput pluginOutputJSON) {
 func (o globalOutput) String() (s string) {
 	if !*machineReadable {
 		var buffer bytes.Buffer
-		for i,v := range(o) {
+		for i, v := range o {
 			buffer.WriteString(fmt.Sprintf("%15s: %s\n", i, *v))
 		}
 		s = buffer.String()
 	} else {
 		s = string(marshalIndent(&o))
 	}
-	return 
+	return
 }
 
 func check(err error, exitCode int, msg string) {
@@ -546,7 +546,7 @@ func generateConfParams(pluginName string) (confParams json.RawMessage) {
 		generatedConfig[mm["name"].(string)] = mm["default"].(string)
 	}
 
-	b :=  marshal(generatedConfig)
+	b := marshal(generatedConfig)
 	return byteToRawMessage(b)
 }
 
