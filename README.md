@@ -21,14 +21,20 @@ get started
 
 features
 ---
-- plugin output validation
-- plugin input validation
-- specify plugin input via a json file
-	- The json gets extended with the defaults parameters to result in a valid plugin input
-- parse configuration parameters from an existing watts.conf
-	- lower precedence than a provided json
 - machine readable json output
+- complement the plugin input with (highest precendence first)
+	- a json string
+	- a json file
+	- a watts.conf (only for the conf_params)
+	
+- validate the plugin input
+- validate the plugin output
+	- "check": check that the json conforms to the api of watts
+	- "test": do "check" and also compare the output a given with expected output
+	
 - generate a default json from the output of the plugins parameter action
+- generate a default json with valid encoded fields, e.g. the watts_userid
+
 
 
 watts version support
