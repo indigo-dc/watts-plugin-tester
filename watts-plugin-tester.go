@@ -443,6 +443,10 @@ func (o *globalOutput) toDefaultJSON() {
 	return
 }
 
+func (o *globalOutput) testOutputAgainst(expectedOutput pluginOutputJSON) {
+	return
+}
+
 func (o globalOutput) String() string {
 	if !*machineReadable {
 		return ""
@@ -537,10 +541,6 @@ func generateConfParams(pluginName string) (confParams json.RawMessage) {
 	return byteToRawMessage(b)
 }
 
-func (o *globalOutput) testOutputAgainst() {
-	return
-}
-
 func jsonFileToMap(file string) (m pluginOutputJSON) {
 	checkFileExistence(file)
 	overrideBytes, err := ioutil.ReadFile(file)
@@ -581,7 +581,7 @@ func main() {
 		expectedOutput := getExpectedOutput()
 		defaultPluginInput.specifyPluginInput()
 		checkOutput := defaultPluginInput.checkPlugin(*pluginName)
-		checkOutput.testOutputAgainst()
+		checkOutput.testOutputAgainst(expectedOutput)
 
 	case generateDefault.FullCommand():
 		defaultPluginInput.specifyPluginInput()
