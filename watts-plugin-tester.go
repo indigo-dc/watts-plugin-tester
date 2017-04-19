@@ -181,6 +181,27 @@ var (
 	}
 )
 
+func jsonFileToPluginInput(file string) (p pluginInput) {
+		checkFileExistence(file)
+		overrideBytes, err := ioutil.ReadFile(file)
+		check(err, exitCodeUserError, "")
+		p = jsonStringToPluginInput(string(overrideBytes))
+		return
+}
+
+func jsonStringToPluginInput(jsonString string) (p pluginInput) {
+		p = pluginInput{}
+		err := json.Unmarshal([]byte(jsonString), &p)
+		check(err, exitCodeUserError, "on unmarshaling user provided json string")
+		return
+}
+
+func merge(dest *pluginInput, src *pluginInput) {
+	err := mergo.Merge(dest, src)
+	check(err, exitCodeInternalError, "merging plugin inputs")
+	return
+}
+
 func (p *pluginInput) validate() {
 	var bs []byte
 	var i interface{}
@@ -262,6 +283,7 @@ func (p *pluginInput) specifyPluginInput() {
 				check(err, exitCodeInternalError, "Formatting conf parameters")
 
 				defaultConfParams = json.RawMessage(confParamsJSON)
+				(*p)["conf_params"] = &defaultConfParams
 			} else {
 				app.Errorf("Could not find configuration parameters for '%s' in '%s'",
 					*inputComplementConfID, *inputComplementConf)
@@ -276,30 +298,15 @@ func (p *pluginInput) specifyPluginInput() {
 
 	// merge a user provided json string
 	if *inputComplementString != "" {
-
-		overridePluginInput := pluginInput{}
-		err := json.Unmarshal([]byte(*inputComplementString), &overridePluginInput)
-		check(err, exitCodeUserError, "on unmarshaling user provided json")
-
-		err = mergo.Merge(&overridePluginInput, p)
-		check(err, exitCodeInternalError, "on merging user provided json")
-
+		overridePluginInput := jsonStringToPluginInput(*inputComplementString)
+		merge(&overridePluginInput,p)
 		*p = overridePluginInput
 	}
 
 	// merge a user provided json file
 	if *inputComplementFile != "" {
-		checkFileExistence(*inputComplementConf)
-		overrideBytes, err := ioutil.ReadFile(*inputComplementFile)
-		check(err, exitCodeUserError, "")
-
-		overridePluginInput := pluginInput{}
-		err = json.Unmarshal(overrideBytes, &overridePluginInput)
-		check(err, exitCodeUserError, "on unmarshaling user provided json file")
-
-		err = mergo.Merge(&overridePluginInput, p)
-		check(err, exitCodeInternalError, "on merging user provided json file")
-
+		overridePluginInput := jsonFileToPluginInput(*inputComplementFile)
+		merge(&overridePluginInput,p)
 		*p = overridePluginInput
 	}
 
@@ -529,6 +536,10 @@ func generateConfParams(pluginName string) (confParams json.RawMessage) {
 	return byteToRawMessage(b)
 }
 
+func (o *globalOutput) testOutputAgainst() {
+	return 
+}
+
 func main() {
 	app.Author("Lukas Burgey @ KIT within the INDIGO DataCloud Project")
 	app.Version("0.4.0")
@@ -540,7 +551,9 @@ func main() {
 
 	case pluginTest.FullCommand():
 		defaultPluginInput.specifyPluginInput()
-		defaultPluginInput.checkPlugin(*pluginName)
+		checkOutput := defaultPluginInput.checkPlugin(*pluginName)
+		checkOutput.testOutputAgainst()
+
 
 	case generateDefault.FullCommand():
 		defaultPluginInput.specifyPluginInput()
