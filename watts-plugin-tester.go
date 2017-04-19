@@ -242,18 +242,18 @@ func (p *pluginInput) generateUserID() {
 	return
 }
 
-// TODO implement extraction of action from input
 func (p *pluginInput) setPluginAction() {
-	var action string
 	if *pluginAction != "" {
 		validatePluginAction(*pluginAction)
-		action = *pluginAction
+		defaultAction = toRawJSONString(*pluginAction)
+		(*p)["action"] = &defaultAction
 	} else {
-		action = "parameter"
+		action := ""
+		err := json.Unmarshal(*(*p)["action"], &action)
+		check(err, exitCodeInternalError, "setPluginAction")
+		validatePluginAction(action)
 	}
 
-	defaultAction = toRawJSONString(action)
-	(*p)["action"] = &defaultAction
 	return
 }
 
@@ -386,7 +386,11 @@ func (p *pluginInput) checkPlugin(pluginName string) (output globalOutput) {
 		return
 	}
 
-	path, err := wattsSchemes[p.version()][*pluginAction].Validate(pluginOutputInterface)
+	pluginAction := ""
+	err = json.Unmarshal(*(*p)["action"], &pluginAction)
+	check(err, exitCodeInternalError, "action")
+
+	path, err := wattsSchemes[p.version()][pluginAction].Validate(pluginOutputInterface)
 	if err != nil {
 		output.print("result", "error")
 		output.print("description", fmt.Sprintf("validation error %s", err))
@@ -604,7 +608,7 @@ func main() {
 		fmt.Printf("%s", defaultPluginInput.checkPlugin(*pluginName))
 
 	case pluginTest.FullCommand():
-		(*machineReadable) = true
+		*machineReadable = true
 		expectedOutput := getExpectedOutput()
 		defaultPluginInput.specifyPluginInput()
 		checkOutput := defaultPluginInput.checkPlugin(*pluginName)
