@@ -306,7 +306,6 @@ func (p *pluginInput) specifyPluginInput() {
 		check(err, exitCodeInternalError, "on merging user provided json")
 
 		*p = overridePluginInput
-		return
 	}
 
 	// merge a user provided json file
@@ -322,8 +321,10 @@ func (p *pluginInput) specifyPluginInput() {
 		check(err, exitCodeInternalError, "on merging user provided json file")
 
 		*p = overridePluginInput
-		return
 	}
+
+	p.generateUserID()
+	p.validate()
 }
 
 func (p *pluginInput) version() (version string) {
@@ -540,8 +541,6 @@ func main() {
 
 	case printSpecific.FullCommand():
 		defaultPluginInput.specifyPluginInput()
-		defaultPluginInput.generateUserID()
-		defaultPluginInput.validate()
 
 		fmt.Printf("%s", defaultPluginInput.marshalPluginInput())
 	}
