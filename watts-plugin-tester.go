@@ -405,6 +405,7 @@ func (p pluginInput) String() string {
 }
 
 func (o *globalOutput) printJSON(a string, b json.RawMessage) {
+	/*
 	if !*machineReadable {
 		bs, err := json.MarshalIndent(&b, outputIndentation, outputTabWidth)
 		if err != nil {
@@ -414,17 +415,13 @@ func (o *globalOutput) printJSON(a string, b json.RawMessage) {
 		}
 		return
 	}
+	*/
 	outputMessages = append(outputMessages, b)
 	(*o)[a] = &(outputMessages[len(outputMessages)-1])
 
 }
 
 func (o *globalOutput) print(a string, b string) {
-	if !*machineReadable {
-		fmt.Printf("%15s: %s\n", a, b)
-		return
-	}
-
 	m := toRawJSONString(b)
 	outputMessages = append(outputMessages, m)
 	(*o)[a] = &(outputMessages[len(outputMessages)-1])
@@ -439,11 +436,6 @@ func (o *globalOutput) printArbitrary(a string, b string) {
 	m := toRawJSONString(escapeJSONString(b))
 	outputMessages = append(outputMessages, m)
 	(*o)[a] = &(outputMessages[len(outputMessages)-1])
-}
-
-func (o *globalOutput) toDefaultJSON() {
-	fmt.Printf("%s %T", (*o), (*o))
-	return
 }
 
 func (o *globalOutput) testOutputAgainst(expectedOutput pluginOutputJSON) {
@@ -469,13 +461,17 @@ func (o *globalOutput) testOutputAgainst(expectedOutput pluginOutputJSON) {
 	return
 }
 
-func (o globalOutput) String() string {
+func (o globalOutput) String() (s string) {
 	if !*machineReadable {
-		return ""
+		var buffer bytes.Buffer
+		for i,v := range(o) {
+			buffer.WriteString(fmt.Sprintf("%15s: %s\n", i, *v))
+		}
+		s = buffer.String()
+	} else {
+		s = string(marshalIndent(&o))
 	}
-
-	bs := marshalIndent(&o)
-	return fmt.Sprintf("%s", string(bs))
+	return 
 }
 
 func check(err error, exitCode int, msg string) {
@@ -520,11 +516,7 @@ func byteToRawMessage(inputBytes []byte) (rawMessage json.RawMessage) {
 	if err != nil {
 		rawMessage = toRawJSONString(escapeJSONString(string(inputBytes)))
 	} else {
-		err = json.Unmarshal(inputBytes, &rawMessage)
-		if err != nil {
-			app.Errorf("unmarshal successful, but bad json conversion: '%s'\n", string(inputBytes))
-			rawMessage = toRawJSONString("got erroneous output")
-		}
+		rawMessage = json.RawMessage(marshalIndent(testJSONObject))
 	}
 	return
 }
