@@ -5,8 +5,8 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	v "github.com/gima/govalid/v1"
 	"github.com/imdario/mergo"
+	"github.com/indigo-dc/watts-plugin-tester/schemes"
 	"github.com/kalaspuffar/base64url"
 	"gopkg.in/alecthomas/kingpin.v2"
 	"io/ioutil"
@@ -87,99 +87,6 @@ var (
 		"user_info":         &defaultUserInfo,
 		"additional_logins": &defaultAdditionalLogins,
 	}
-
-	schemeAccessToken = v.Optional(v.String())
-	schemeUserInfo    = v.Object(
-		v.ObjKV("iss", v.String()),
-		v.ObjKV("sub", v.String()),
-	)
-	schemeAdditionalLogins = v.Array(v.ArrEach(
-		v.Object(
-			v.ObjKV("user_info", schemeUserInfo),
-			v.ObjKV("access_token", schemeAccessToken),
-		),
-	))
-	schemeParams = v.Object(
-		v.ObjKeys(v.String(v.StrRegExp("^[a-z0-9_]+$"))),
-	)
-	schemeCredential = v.Object(
-		v.ObjKV("name", v.String()),
-		v.ObjKV("type", v.String()),
-		v.ObjKV("value", v.String()),
-		v.ObjKV("save_as", v.Optional(v.String())),
-		v.ObjKV("rows", v.Optional(v.Number())),
-		v.ObjKV("cols", v.Optional(v.Number())),
-	)
-	schemeRequestParam = v.Object(
-		v.ObjKV("key", v.String()),
-		v.ObjKV("name", v.String()),
-		v.ObjKV("description", v.String()),
-		v.ObjKV("type", v.String()),
-		v.ObjKV("mandatory", v.Boolean()),
-	)
-	pluginInputScheme = v.Object(
-		v.ObjKV("watts_version", v.String()),
-		v.ObjKV("watts_userid", v.String()),
-		v.ObjKV("cred_state", v.String()),
-		v.ObjKV("access_token", schemeAccessToken),
-		v.ObjKV("additional_logins", schemeAdditionalLogins),
-		v.ObjKV("conf_params", schemeParams),
-		v.ObjKV("params", schemeParams),
-		v.ObjKV("user_info", schemeUserInfo),
-	)
-	schemeRequestResultValue = v.Object(v.ObjKV("result", v.Or(
-		v.String(v.StrIs("error")),
-		v.String(v.StrIs("oidc_login")),
-		v.String(v.StrIs("ok")),
-	)))
-	schemesRequest = map[string]v.Validator{
-		"error": v.Object(
-			v.ObjKV("result", v.String(v.StrIs("error"))),
-			v.ObjKV("user_msg", v.String()),
-			v.ObjKV("log_msg", v.String()),
-		),
-		"oidc_login": v.Object(
-			v.ObjKV("result", v.String(v.StrIs("oidc_login"))),
-			v.ObjKV("provider", v.String()),
-			v.ObjKV("msg", v.String()),
-		),
-		"ok": v.Object(
-			v.ObjKV("result", v.String(v.StrIs("ok"))),
-			v.ObjKV("credential", v.Array(v.ArrEach(schemeCredential))),
-			v.ObjKV("state", v.String()),
-		),
-	}
-
-	wattsSchemes = map[string](map[string]v.Validator){
-		"1.0.0": map[string]v.Validator{
-			"parameter": v.Object(
-				v.ObjKV("result", v.String(v.StrIs("ok"))),
-				v.ObjKV("version", v.String()),
-				v.ObjKV("conf_params", v.Array(v.ArrEach(
-					v.Object(
-						v.ObjKV("name", v.String()),
-						v.ObjKV("type", v.String()),
-						v.ObjKV("default", v.String()),
-					),
-				))),
-				v.ObjKV("request_params", v.Array(v.ArrEach(
-					v.Array(v.ArrEach(schemeRequestParam)),
-				))),
-			),
-			"request": v.Function(validateRequestScheme),
-			"revoke": v.Or(
-				v.Object(
-					v.ObjKV("result", v.String(v.StrIs("error"))),
-					v.ObjKV("user_msg", v.String()),
-					v.ObjKV("log_msg", v.String()),
-				),
-				v.Object(
-					v.ObjKV("result", v.String(v.StrIs("ok"))),
-				),
-			),
-		}, // end of "1.0.0"
-
-	}
 )
 
 func jsonFileToPluginInput(file string) (p pluginInput) {
@@ -209,7 +116,7 @@ func (p *pluginInput) validate() {
 	bs := marshalIndent(p)
 	err := json.Unmarshal(bs, &i)
 	check(err, exitCodeInternalError, "unmarshal error")
-	path, err := pluginInputScheme.Validate(i)
+	path, err := schemes.PluginInputScheme.Validate(i)
 
 	if err != nil {
 		app.Errorf("Unable to validate plugin input")
@@ -327,7 +234,7 @@ func (p *pluginInput) version() (version string) {
 	versionExtractor, _ := regexp.Compile("[^\"+v]+")
 	extractedVersion := versionExtractor.Find(versionBytes)
 
-	if _, versionFound := wattsSchemes[string(extractedVersion)]; !versionFound {
+	if _, versionFound := schemes.WattsSchemes[string(extractedVersion)]; !versionFound {
 		extractedVersion = versionExtractor.Find(defaultWattsVersion)
 		(*p)["watts_version"] = &defaultWattsVersion
 	}
@@ -390,7 +297,7 @@ func (p *pluginInput) checkPlugin(pluginName string) (output globalOutput) {
 	err = json.Unmarshal(*(*p)["action"], &pluginAction)
 	check(err, exitCodeInternalError, "action")
 
-	path, err := wattsSchemes[p.version()][pluginAction].Validate(pluginOutputInterface)
+	path, err := schemes.WattsSchemes[p.version()][pluginAction].Validate(pluginOutputInterface)
 	if err != nil {
 		output.print("result", "error")
 		output.print("description", fmt.Sprintf("validation error %s", err))
@@ -493,16 +400,6 @@ func check(err error, exitCode int, msg string) {
 func checkFileExistence(name string) {
 	_, err := os.Stat(name)
 	check(err, exitCodeUserError, "")
-}
-
-func validateRequestScheme(data interface{}) (path string, err error) {
-	path, err = schemeRequestResultValue.Validate(data)
-	if err != nil {
-		return
-	}
-
-	resultValue := data.(map[string]interface{})["result"].(string)
-	return schemesRequest[resultValue].Validate(data)
 }
 
 func validatePluginAction(action string) {
