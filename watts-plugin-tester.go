@@ -52,7 +52,7 @@ var (
 	expectedOutputFile   = pluginTest.Flag("expected-output-file", "Expected output as a file").String()
 	expectedOutputString = pluginTest.Flag("expected-output-string", "Expected output as a string").String()
 
-	printDefault  = app.Command("default", "Print the default plugin input as json")
+	printDefault = app.Command("default", "Print the default plugin input as json")
 
 	printSpecific = app.Command("specific", "Print the plugin input (including the user override) as json")
 
@@ -182,18 +182,18 @@ var (
 )
 
 func jsonFileToPluginInput(file string) (p pluginInput) {
-		checkFileExistence(file)
-		overrideBytes, err := ioutil.ReadFile(file)
-		check(err, exitCodeUserError, "")
-		p = jsonStringToPluginInput(string(overrideBytes))
-		return
+	checkFileExistence(file)
+	overrideBytes, err := ioutil.ReadFile(file)
+	check(err, exitCodeUserError, "")
+	p = jsonStringToPluginInput(string(overrideBytes))
+	return
 }
 
 func jsonStringToPluginInput(jsonString string) (p pluginInput) {
-		p = pluginInput{}
-		err := json.Unmarshal([]byte(jsonString), &p)
-		check(err, exitCodeUserError, "on unmarshaling user provided json string")
-		return
+	p = pluginInput{}
+	err := json.Unmarshal([]byte(jsonString), &p)
+	check(err, exitCodeUserError, "on unmarshaling user provided json string")
+	return
 }
 
 func merge(dest *pluginInput, src *pluginInput) {
@@ -299,14 +299,14 @@ func (p *pluginInput) specifyPluginInput() {
 	// merge a user provided json string
 	if *inputComplementString != "" {
 		overridePluginInput := jsonStringToPluginInput(*inputComplementString)
-		merge(&overridePluginInput,p)
+		merge(&overridePluginInput, p)
 		*p = overridePluginInput
 	}
 
 	// merge a user provided json file
 	if *inputComplementFile != "" {
 		overridePluginInput := jsonFileToPluginInput(*inputComplementFile)
-		merge(&overridePluginInput,p)
+		merge(&overridePluginInput, p)
 		*p = overridePluginInput
 	}
 
@@ -537,7 +537,34 @@ func generateConfParams(pluginName string) (confParams json.RawMessage) {
 }
 
 func (o *globalOutput) testOutputAgainst() {
-	return 
+	return
+}
+
+func jsonFileToMap(file string) (m map[string]interface{}) {
+	checkFileExistence(file)
+	overrideBytes, err := ioutil.ReadFile(file)
+	check(err, exitCodeUserError, "")
+	m = jsonFileToMap(string(overrideBytes))
+	return
+}
+
+func jsonStringToMap(jsonString string) (m map[string]interface{}) {
+	m = map[string]interface{}{}
+	err := json.Unmarshal([]byte(jsonString), &m)
+	check(err, exitCodeUserError, "on unmarshaling user provided json string")
+	return
+}
+
+func getExpectedOutput() (m map[string]interface{}) {
+	if *expectedOutputFile != "" {
+		m = jsonFileToMap(*expectedOutputFile)
+	} else if *expectedOutputString != "" {
+		m = jsonStringToMap(*expectedOutputString)
+	} else {
+		app.Errorf("No expected output provided")
+		os.Exit(exitCodeUserError)
+	}
+	return
 }
 
 func main() {
@@ -550,10 +577,13 @@ func main() {
 		fmt.Printf("%s", defaultPluginInput.checkPlugin(*pluginName))
 
 	case pluginTest.FullCommand():
+		expectedOutput := getExpectedOutput()
+		fmt.Printf("%s", expectedOutput)
+		os.Exit(exitCodeInternalError)
+
 		defaultPluginInput.specifyPluginInput()
 		checkOutput := defaultPluginInput.checkPlugin(*pluginName)
 		checkOutput.testOutputAgainst()
-
 
 	case generateDefault.FullCommand():
 		defaultPluginInput.specifyPluginInput()
