@@ -35,6 +35,7 @@ var (
 
 	app          = kingpin.New("watts-plugin-tester", "Test tool for watts plugins")
 	pluginAction = app.Flag("plugin-action", "The plugin action to run the plugin with").Default("parameter").Short('a').String()
+	pluginName   = app.Flag("plugin-name", "Name of the plugin").Short('p').String()
 
 	inputComplementFile   = app.Flag("json-file", "Complement the plugin input with a json file").Short('j').String()
 	inputComplementString = app.Flag("json", "Complement the plugin input with a json object (provided as a string)").String()
@@ -45,17 +46,16 @@ var (
 	useEnvForParameterPass = app.Flag("env", "Use this environment variable to pass the plugin input to the plugin").Short('e').Bool()
 	envVarForParameterPass = app.Flag("env-var", "This environment variable is used to pass the plugin input to the plugin").Default("WATTS_PARAMETER").String()
 
-	pluginCheck     = app.Command("check", "Check a plugin against the inbuilt typed schema")
-	pluginCheckName = pluginCheck.Arg("pluginName", "Name of the plugin to check").Required().String()
+	pluginCheck = app.Command("check", "Check a plugin against the inbuilt typed schema")
 
-	pluginTest     = app.Command("test", "Test a plugin against the inbuilt typed schema and expected output values")
-	pluginTestName = pluginTest.Arg("pluginName", "Name of the plugin to test").Required().String()
+	pluginTest           = app.Command("test", "Test a plugin against the inbuilt typed schema and expected output values")
+	expectedOutputFile   = pluginTest.Flag("expected-output-file", "Expected output as a file").String()
+	expectedOutputString = pluginTest.Flag("expected-output-string", "Expected output as a string").String()
 
 	printDefault  = app.Command("default", "Print the default plugin input as json")
 	printSpecific = app.Command("specific", "Print the plugin input (including the user override) as json")
 
 	generateDefault    = app.Command("generate", "Generate a fitting json input file for the given plugin")
-	pluginGenerateName = generateDefault.Arg("pluginName", "Name of the plugin to generate a default json for").Required().String()
 
 	outputMessages = []json.RawMessage{}
 
@@ -527,11 +527,15 @@ func main() {
 	switch kingpin.MustParse(app.Parse(os.Args[1:])) {
 	case pluginCheck.FullCommand():
 		defaultPluginInput.specifyPluginInput()
-		fmt.Printf("%s", defaultPluginInput.checkPlugin(*pluginCheckName))
+		fmt.Printf("%s", defaultPluginInput.checkPlugin(*pluginName))
+
+	case pluginTest.FullCommand():
+		defaultPluginInput.specifyPluginInput()
+		defaultPluginInput.checkPlugin(*pluginName)
 
 	case generateDefault.FullCommand():
 		defaultPluginInput.specifyPluginInput()
-		defaultConfParams = generateConfParams(*pluginGenerateName)
+		defaultConfParams = generateConfParams(*pluginName)
 		defaultPluginInput.validate()
 		fmt.Printf("%s", defaultPluginInput)
 
