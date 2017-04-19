@@ -34,7 +34,7 @@ var (
 	exitCodeUserError            = 4
 
 	app          = kingpin.New("watts-plugin-tester", "Test tool for watts plugins")
-	pluginAction = app.Flag("plugin-action", "The plugin action to run the plugin with").Default("parameter").Short('a').String()
+	pluginAction = app.Flag("plugin-action", "The plugin action to run the plugin with. Defaults to 'parameter'").Short('a').String()
 	pluginName   = app.Flag("plugin-name", "Name of the plugin").Short('p').String()
 
 	inputComplementFile   = app.Flag("json-file", "Complement the plugin input with a json file").Short('j').String()
@@ -53,9 +53,10 @@ var (
 	expectedOutputString = pluginTest.Flag("expected-output-string", "Expected output as a string").String()
 
 	printDefault  = app.Command("default", "Print the default plugin input as json")
+
 	printSpecific = app.Command("specific", "Print the plugin input (including the user override) as json")
 
-	generateDefault    = app.Command("generate", "Generate a fitting json input file for the given plugin")
+	generateDefault = app.Command("generate", "Generate a fitting json input file for the given plugin")
 
 	outputMessages = []json.RawMessage{}
 
@@ -239,6 +240,7 @@ func (p *pluginInput) specifyPluginInput() {
 
 	// merge a user provided watts config
 	if *inputComplementConf != "" {
+		checkFileExistence(*inputComplementConf)
 		if *inputComplementConfID != "" {
 			fileContent, err := ioutil.ReadFile(*inputComplementConf)
 			check(err, exitCodeUserError, "")
@@ -287,6 +289,7 @@ func (p *pluginInput) specifyPluginInput() {
 
 	// merge a user provided json file
 	if *inputComplementFile != "" {
+		checkFileExistence(*inputComplementConf)
 		overrideBytes, err := ioutil.ReadFile(*inputComplementFile)
 		check(err, exitCodeUserError, "")
 
@@ -323,6 +326,7 @@ func (p *pluginInput) version() (version string) {
 }
 
 func (p *pluginInput) executePlugin(pluginName string) (output pluginOutput) {
+	checkFileExistence(pluginName)
 	pluginInputJSON := p.marshalPluginInput()
 	inputBase64 := base64.StdEncoding.EncodeToString(pluginInputJSON)
 
@@ -456,6 +460,11 @@ func check(err error, exitCode int, msg string) {
 	return
 }
 
+func checkFileExistence(name string) {
+	_, err := os.Stat(name)
+	check(err, exitCodeUserError, "")
+}
+
 func validateRequestScheme(data interface{}) (path string, err error) {
 	path, err = schemeRequestResultValue.Validate(data)
 	if err != nil {
@@ -506,7 +515,7 @@ func generateConfParams(pluginName string) (confParams json.RawMessage) {
 
 	m := map[string]interface{}{}
 	err := json.Unmarshal(pluginOutput.outputBytes, &m)
-	check(err, 1, "foo")
+	check(err, 1, "unmarshal")
 	confParamsInterface := m["conf_params"].([]interface{})
 
 	generatedConfig := map[string](interface{}){}
