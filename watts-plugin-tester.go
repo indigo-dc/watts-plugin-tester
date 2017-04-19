@@ -180,35 +180,6 @@ var (
 	}
 )
 
-func check(err error, exitCode int, msg string) {
-	if err != nil {
-		if msg != "" {
-			app.Errorf("%s - %s", err, msg)
-		} else {
-			app.Errorf("%s", err)
-		}
-		os.Exit(exitCode)
-	}
-	return
-}
-
-func validateRequestScheme(data interface{}) (path string, err error) {
-	path, err = schemeRequestResultValue.Validate(data)
-	if err != nil {
-		return
-	}
-
-	resultValue := data.(map[string]interface{})["result"].(string)
-	return schemesRequest[resultValue].Validate(data)
-}
-
-func validatePluginAction(action string) {
-	if action != "request" && action != "parameter" && action != "revoke" {
-		app.Errorf("invalid plugin action %s", action)
-		os.Exit(exitCodeUserError)
-	}
-}
-
 func (p *pluginInput) validate() {
 	var bs []byte
 	var i interface{}
@@ -414,6 +385,11 @@ func (p *pluginInput) checkPlugin(pluginName string) (output globalOutput) {
 	return
 }
 
+func (p pluginInput) String() string {
+	return fmt.Sprintf("%s", p.marshalPluginInput())
+}
+
+
 func (o *globalOutput) printJSON(a string, b json.RawMessage) {
 	if !*machineReadable {
 		bs, err := json.MarshalIndent(&b, outputIndentation, outputTabWidth)
@@ -428,6 +404,7 @@ func (o *globalOutput) printJSON(a string, b json.RawMessage) {
 	(*o)[a] = &(outputMessages[len(outputMessages)-1])
 
 }
+
 func (o *globalOutput) print(a string, b string) {
 	if !*machineReadable {
 		fmt.Printf("%15s: %s\n", a, b)
@@ -438,6 +415,7 @@ func (o *globalOutput) print(a string, b string) {
 	outputMessages = append(outputMessages, m)
 	(*o)[a] = &(outputMessages[len(outputMessages)-1])
 }
+
 func (o *globalOutput) printArbitrary(a string, b string) {
 	if !*machineReadable {
 		fmt.Printf("%15s: %s\n", a, b)
@@ -447,6 +425,11 @@ func (o *globalOutput) printArbitrary(a string, b string) {
 	m := toRawJSONString(escapeJSONString(b))
 	outputMessages = append(outputMessages, m)
 	(*o)[a] = &(outputMessages[len(outputMessages)-1])
+}
+
+func (o *globalOutput) toDefaultJSON() {
+	fmt.Printf("%s %T", (*o), (*o))
+	return
 }
 
 func (o globalOutput) String() string {
@@ -462,13 +445,34 @@ func (o globalOutput) String() string {
 	return fmt.Sprintf("%s", string(bs))
 }
 
-func (i pluginInput) String() string {
-	return fmt.Sprintf("%s", i.marshalPluginInput())
+
+func check(err error, exitCode int, msg string) {
+	if err != nil {
+		if msg != "" {
+			app.Errorf("%s - %s", err, msg)
+		} else {
+			app.Errorf("%s", err)
+		}
+		os.Exit(exitCode)
+	}
+	return
 }
 
-func (o *globalOutput) toDefaultJSON() {
-	fmt.Printf("%s %T", (*o), (*o))
-	return
+func validateRequestScheme(data interface{}) (path string, err error) {
+	path, err = schemeRequestResultValue.Validate(data)
+	if err != nil {
+		return
+	}
+
+	resultValue := data.(map[string]interface{})["result"].(string)
+	return schemesRequest[resultValue].Validate(data)
+}
+
+func validatePluginAction(action string) {
+	if action != "request" && action != "parameter" && action != "revoke" {
+		app.Errorf("invalid plugin action %s", action)
+		os.Exit(exitCodeUserError)
+	}
 }
 
 func byteToRawMessage(inputBytes []byte) (rawMessage json.RawMessage) {
@@ -499,9 +503,7 @@ func escapeJSONString(s string) (e string) {
 	return
 }
 
-/*
-* all plugin input generation shall take place here
- */
+
 func main() {
 	app.Author("Lukas Burgey @ KIT within the INDIGO DataCloud Project")
 	app.Version("0.4.0")
