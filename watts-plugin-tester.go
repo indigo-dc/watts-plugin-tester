@@ -234,8 +234,7 @@ func (p *pluginInput) generateUserID() {
 	userIDJSONReduced["issuer"] = userIDJSON["iss"]
 	userIDJSONReduced["subject"] = userIDJSON["sub"]
 
-	j, err := json.Marshal(userIDJSONReduced)
-	check(err, exitCodeInternalError, "")
+	j := marshal(userIDJSONReduced)
 
 	escaped := bytes.Replace(j, []byte{'/'}, []byte{'\\', '/'}, -1)
 	defaultWattsUserID = toRawJSONString(base64url.Encode(escaped))
@@ -285,8 +284,7 @@ func (p *pluginInput) specifyPluginInput() {
 					confParams[string(matches[i][1])] = string(matches[i][2])
 				}
 
-				confParamsJSON, err := json.Marshal(confParams)
-				check(err, exitCodeInternalError, "Formatting conf parameters")
+				confParamsJSON := marshal(confParams)
 
 				defaultConfParams = json.RawMessage(confParamsJSON)
 				(*p)["conf_params"] = &defaultConfParams
@@ -449,14 +447,13 @@ func (o *globalOutput) toDefaultJSON() {
 }
 
 func (o *globalOutput) testOutputAgainst(expectedOutput pluginOutputJSON) {
-	bs, err := json.Marshal(expectedOutput)
-	check(err, exitCodeInternalError, "testOutputAgainst")
+	bs := marshal(expectedOutput)
 
 	o.printJSON("output_expected", json.RawMessage(bs))
 
 	po := (*o)["output"]
 	poj := pluginOutputJSON{}
-	err = json.Unmarshal(*po, &poj)
+	err := json.Unmarshal(*po, &poj)
 	check(err, exitCodeInternalError, "testOutputAgainst")
 
 	for i, v := range expectedOutput {
@@ -557,8 +554,7 @@ func generateConfParams(pluginName string) (confParams json.RawMessage) {
 		generatedConfig[mm["name"].(string)] = mm["default"].(string)
 	}
 
-	b, err := json.Marshal(generatedConfig)
-	check(err, exitCodeInternalError, "")
+	b :=  marshal(generatedConfig)
 	return byteToRawMessage(b)
 }
 
