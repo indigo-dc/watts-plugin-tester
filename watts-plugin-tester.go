@@ -462,6 +462,10 @@ func (o globalOutput) String() string {
 	return fmt.Sprintf("%s", string(bs))
 }
 
+func (i pluginInput) String() string {
+	return fmt.Sprintf("%s", i.marshalPluginInput())
+}
+
 func (o *globalOutput) toDefaultJSON() {
 	fmt.Printf("%s %T", (*o), (*o))
 	return
@@ -529,15 +533,14 @@ func main() {
 
 		defaultPluginInput.validate()
 
-		fmt.Printf("%s", defaultPluginInput.marshalPluginInput())
+		fmt.Printf("%s", defaultPluginInput)
 
 	case printDefault.FullCommand():
-		fmt.Printf("%s", defaultPluginInput.marshalPluginInput())
+		fmt.Printf("%s", defaultPluginInput)
 
 	case printSpecific.FullCommand():
 		defaultPluginInput.specifyPluginInput()
-
-		fmt.Printf("%s", defaultPluginInput.marshalPluginInput())
+		fmt.Printf("%s", defaultPluginInput)
 	}
 
 	os.Exit(exitCode)
