@@ -252,6 +252,12 @@ func (p *pluginInput) generateUserID() {
 	return
 }
 
+func (p *pluginInput) setPluginAction() {
+	defaultAction = toRawJSONString(*pluginAction)
+	(*p)["action"] = &defaultAction
+	return
+}
+
 func (p *pluginInput) marshalPluginInput() (s []byte) {
 	s, err := json.MarshalIndent(*p, outputTabWidth, outputTabWidth)
 	check(err, exitCodeInternalError, fmt.Sprintf("unable to marshal '%s'", s))
@@ -324,6 +330,7 @@ func (p *pluginInput) specifyPluginInput() {
 	}
 
 	p.generateUserID()
+	p.setPluginAction()
 	p.validate()
 }
 
@@ -497,23 +504,11 @@ func main() {
 
 	switch kingpin.MustParse(app.Parse(os.Args[1:])) {
 	case pluginCheck.FullCommand():
-		validatePluginAction(*pluginAction)
-
 		defaultPluginInput.specifyPluginInput()
-		defaultAction = toRawJSONString(*pluginAction)
-		defaultPluginInput["action"] = &defaultAction
-
-		defaultPluginInput.generateUserID()
-		defaultPluginInput.validate()
-
 		fmt.Printf("%s", defaultPluginInput.checkPlugin(*pluginCheckName))
 
 	case generateDefault.FullCommand():
 		defaultPluginInput.specifyPluginInput()
-		defaultPluginInput["action"] = &defaultAction
-
-		defaultPluginInput.generateUserID()
-		defaultPluginInput.validate()
 
 		pluginOutput := defaultPluginInput.executePlugin(*pluginGenerateName)
 
