@@ -246,8 +246,17 @@ func (p *pluginInput) generateUserID() {
 	return
 }
 
+// TODO implement extraction of action from input
 func (p *pluginInput) setPluginAction() {
-	defaultAction = toRawJSONString(*pluginAction)
+	var action string
+	if *pluginAction != "" {
+		validatePluginAction(*pluginAction)
+		action = *pluginAction
+	} else {
+		action = "parameter"
+	}
+
+	defaultAction = toRawJSONString(action)
 	(*p)["action"] = &defaultAction
 	return
 }
