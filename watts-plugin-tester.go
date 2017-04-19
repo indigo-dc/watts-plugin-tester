@@ -554,7 +554,7 @@ func jsonFileToMap(file string) (m pluginOutputJSON) {
 	checkFileExistence(file)
 	overrideBytes, err := ioutil.ReadFile(file)
 	check(err, exitCodeUserError, "")
-	m = jsonFileToMap(string(overrideBytes))
+	m = jsonStringToMap(string(overrideBytes))
 	return
 }
 
