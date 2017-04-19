@@ -51,8 +51,8 @@ var (
 	pluginTest     = app.Command("test", "Test a plugin against the inbuilt typed schema and expected output values")
 	pluginTestName = pluginTest.Arg("pluginName", "Name of the plugin to test").Required().String()
 
-	printDefault     = app.Command("default", "Print the default plugin input as json")
-	printSpecific    = app.Command("specific", "Print the plugin input (including the user override) as json")
+	printDefault  = app.Command("default", "Print the default plugin input as json")
+	printSpecific = app.Command("specific", "Print the plugin input (including the user override) as json")
 
 	generateDefault    = app.Command("generate", "Generate a fitting json input file for the given plugin")
 	pluginGenerateName = generateDefault.Arg("pluginName", "Name of the plugin to generate a default json for").Required().String()
@@ -64,12 +64,12 @@ var (
 	outputTabWidth    = "    "
 
 	defaultwattVersionString = "1.0.0"
-	defaultWattsVersion     = toRawJSONString(defaultwattVersionString)
-	defaultCredentialState  = toRawJSONString("undefined")
-	defaultConfParams       = json.RawMessage(`{}`)
-	defaultParams           = json.RawMessage(`{}`)
-	defaultAdditionalLogins = json.RawMessage(`[]`)
-	defaultUserInfo         = json.RawMessage(`{
+	defaultWattsVersion      = toRawJSONString(defaultwattVersionString)
+	defaultCredentialState   = toRawJSONString("undefined")
+	defaultConfParams        = json.RawMessage(`{}`)
+	defaultParams            = json.RawMessage(`{}`)
+	defaultAdditionalLogins  = json.RawMessage(`[]`)
+	defaultUserInfo          = json.RawMessage(`{
 		"iss": "https://issuer.example.com",
 		"sub": "123456789"
 	}`)
@@ -197,7 +197,7 @@ func (p *pluginInput) validate() {
 		fmt.Printf("%s: %s\n", "Error", err)
 		fmt.Printf("%s: %s\n", "Path", path)
 		os.Exit(exitCodePluginError)
-	} 
+	}
 
 	return
 }
@@ -389,7 +389,6 @@ func (p pluginInput) String() string {
 	return fmt.Sprintf("%s", p.marshalPluginInput())
 }
 
-
 func (o *globalOutput) printJSON(a string, b json.RawMessage) {
 	if !*machineReadable {
 		bs, err := json.MarshalIndent(&b, outputIndentation, outputTabWidth)
@@ -444,7 +443,6 @@ func (o globalOutput) String() string {
 
 	return fmt.Sprintf("%s", string(bs))
 }
-
 
 func check(err error, exitCode int, msg string) {
 	if err != nil {
@@ -503,6 +501,24 @@ func escapeJSONString(s string) (e string) {
 	return
 }
 
+func generateConfParams(pluginName string) (confParams json.RawMessage) {
+	pluginOutput := defaultPluginInput.executePlugin(pluginName)
+
+	m := map[string]interface{}{}
+	err := json.Unmarshal(pluginOutput.outputBytes, &m)
+	check(err, 1, "foo")
+	confParamsInterface := m["conf_params"].([]interface{})
+
+	generatedConfig := map[string](interface{}){}
+	for _, v := range confParamsInterface {
+		mm := v.(map[string]interface{})
+		generatedConfig[mm["name"].(string)] = mm["default"].(string)
+	}
+
+	b, err := json.Marshal(generatedConfig)
+	check(err, exitCodeInternalError, "")
+	return byteToRawMessage(b)
+}
 
 func main() {
 	app.Author("Lukas Burgey @ KIT within the INDIGO DataCloud Project")
@@ -515,26 +531,8 @@ func main() {
 
 	case generateDefault.FullCommand():
 		defaultPluginInput.specifyPluginInput()
-
-		pluginOutput := defaultPluginInput.executePlugin(*pluginGenerateName)
-
-		m := map[string]interface{}{}
-		err := json.Unmarshal(pluginOutput.outputBytes, &m)
-		check(err, 1, "foo")
-		confParams := m["conf_params"].([]interface{})
-
-		generatedConfig := map[string](interface{}){}
-		for _, v := range confParams {
-			mm := v.(map[string]interface{})
-			generatedConfig[mm["name"].(string)] = mm["default"].(string)
-		}
-
-		b, err := json.Marshal(generatedConfig)
-		check(err, exitCodeInternalError, "")
-		defaultConfParams = byteToRawMessage(b)
-
+		defaultConfParams = generateConfParams(*pluginGenerateName)
 		defaultPluginInput.validate()
-
 		fmt.Printf("%s", defaultPluginInput)
 
 	case printDefault.FullCommand():
