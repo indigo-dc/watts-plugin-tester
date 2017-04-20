@@ -57,13 +57,13 @@ var (
 	outputTabWidth    = "    "
 
 	defaultwattVersionString = "1.0.0"
-	defaultPluginInput = jsonObject{
-		"action": "parameter",
-		"watts_version":     "1.0.0",
-		"cred_state":        "undefined",
-		"conf_params":       map[string]interface{}{},
-		"params":            map[string]interface{}{},
-		"user_info":         map[string]interface{}{
+	defaultPluginInput       = jsonObject{
+		"action":        "parameter",
+		"watts_version": "1.0.0",
+		"cred_state":    "undefined",
+		"conf_params":   map[string]interface{}{},
+		"params":        map[string]interface{}{},
+		"user_info": map[string]interface{}{
 			"iss": "https://issuer.example.com",
 			"sub": "123456789",
 		},
@@ -91,10 +91,10 @@ func merge(dest *jsonObject, src *jsonObject) {
 	return
 }
 
-func (p *jsonObject) validate() {
+func validate(pluginInput jsonObject) {
 	var i interface{}
 
-	bs := marshalIndent(p)
+	bs := marshalIndent(pluginInput)
 	err := json.Unmarshal(bs, &i)
 	check(err, exitCodeInternalError, "unmarshal error")
 	path, err := schemes.PluginInputScheme.Validate(i)
@@ -110,39 +110,38 @@ func (p *jsonObject) validate() {
 	return
 }
 
-func (p *jsonObject) generateUserID() {
+func generateUserID(pluginInput jsonObject) jsonObject {
 	userIDJSONReduced := map[string]interface{}{}
 
-	userInfo := (*p)["user_info"].(map[string]interface{})
+	userInfo := pluginInput["user_info"].(map[string]interface{})
 	userIDJSONReduced["issuer"] = userInfo["iss"]
 	userIDJSONReduced["subject"] = userInfo["sub"]
 
 	j := marshal(userIDJSONReduced)
 
 	escaped := bytes.Replace(j, []byte{'/'}, []byte{'\\', '/'}, -1)
-	(*p)["watts_userid"] = base64url.Encode(escaped)
-	return
+	pluginInput["watts_userid"] = base64url.Encode(escaped)
+	return pluginInput
 }
 
-func (p *jsonObject) setPluginAction() {
+func setPluginAction(pluginInput jsonObject) jsonObject {
 	if *pluginAction != "" {
 		validatePluginAction(*pluginAction)
 		defaultAction := toRawJSONString(*pluginAction)
-		(*p)["action"] = &defaultAction
+		pluginInput["action"] = &defaultAction
 	} else {
-		action := (*p)["action"].(string)
+		action := pluginInput["action"].(string)
 		validatePluginAction(action)
 	}
+	return pluginInput
+}
 
+func marshalPluginInput(pluginInput jsonObject) (s []byte) {
+	s = marshalIndent(pluginInput)
 	return
 }
 
-func (p *jsonObject) marshalPluginInput() (s []byte) {
-	s = marshalIndent(*p)
-	return
-}
-
-func (p *jsonObject) specifyPluginInput() {
+func specifyPluginInput(pluginInput jsonObject) jsonObject {
 
 	// merge a user provided watts config
 	if *inputComplementConf != "" {
@@ -167,7 +166,7 @@ func (p *jsonObject) specifyPluginInput() {
 				confParamsJSON := marshal(confParams)
 
 				defaultConfParams := json.RawMessage(confParamsJSON)
-				(*p)["conf_params"] = &defaultConfParams
+				pluginInput["conf_params"] = &defaultConfParams
 			} else {
 				app.Errorf("Could not find configuration parameters for '%s' in '%s'",
 					*inputComplementConfID, *inputComplementConf)
@@ -183,24 +182,24 @@ func (p *jsonObject) specifyPluginInput() {
 	// merge a user provided json file
 	if *inputComplementFile != "" {
 		overridePluginInput := jsonFileToObject(*inputComplementFile)
-		merge(&overridePluginInput, p)
-		*p = overridePluginInput
+		merge(&overridePluginInput, &pluginInput)
+		pluginInput = overridePluginInput
 	}
 
 	// merge a user provided json string
 	if *inputComplementString != "" {
 		overridePluginInput := jsonStringToObject(*inputComplementString)
-		merge(&overridePluginInput, p)
-		*p = overridePluginInput
+		merge(&overridePluginInput, &pluginInput)
+		pluginInput = overridePluginInput
 	}
 
-	p.generateUserID()
-	p.setPluginAction()
-	p.validate()
+	pluginInput = setPluginAction(generateUserID(pluginInput))
+	validate(pluginInput)
+	return pluginInput
 }
 
-func (p *jsonObject) version() (version string) {
-	versionJSON := (*p)["watts_version"]
+func version(pluginInput jsonObject) (version string) {
+	versionJSON := pluginInput["watts_version"]
 	versionBytes, err := json.Marshal(&versionJSON)
 	check(err, exitCodeInternalError, "")
 
@@ -208,21 +207,20 @@ func (p *jsonObject) version() (version string) {
 	extractedVersion := versionExtractor.Find(versionBytes)
 
 	if _, versionFound := schemes.WattsSchemes[string(extractedVersion)]; !versionFound {
-		extractedVersion = versionExtractor.Find((*p)["watts_version"].([]byte))
-		(*p)["watts_version"] = defaultwattVersionString
+		extractedVersion = versionExtractor.Find(pluginInput["watts_version"].([]byte))
+		pluginInput["watts_version"] = defaultwattVersionString
 	}
 
 	version = string(extractedVersion)
 	return
 }
 
-func (o *jsonObject) executePlugin(pluginName string, p *jsonObject) (po pluginOutput) {
+func (o *jsonObject) executePlugin(pluginName string, pluginInput jsonObject) (po pluginOutput) {
 	checkFileExistence(pluginName)
-	jsonObjectJSON := p.marshalPluginInput()
-	inputBase64 := base64.StdEncoding.EncodeToString(jsonObjectJSON)
+	inputBase64 := base64.StdEncoding.EncodeToString(marshalPluginInput(pluginInput))
 
 	o.print("plugin_name", pluginName)
-	o.print("plugin_input", p)
+	o.print("plugin_input", pluginInput)
 
 	var cmd *exec.Cmd
 	if *useEnvForParameterPass {
@@ -260,9 +258,9 @@ func (o *jsonObject) executePlugin(pluginName string, p *jsonObject) (po pluginO
 	return
 }
 
-func (o *jsonObject) checkPluginOutput(po pluginOutput, pi *jsonObject) {
-	version := pi.version()
-	action := (*pi)["action"].(string)
+func (o *jsonObject) checkPluginOutput(po pluginOutput, pluginInput jsonObject) {
+	version := version(pluginInput)
+	action := pluginInput["action"].(string)
 
 	path, err := schemes.WattsSchemes[version][action].Validate(po)
 	if err != nil {
@@ -301,7 +299,7 @@ func (o *jsonObject) testOutputAgainst(po pluginOutput, expectedOutput jsonObjec
 func (o jsonObject) String() (s string) {
 	if !*machineReadable {
 		var buffer bytes.Buffer
-		for i, v := range(o) {
+		for i, v := range o {
 			buffer.WriteString(fmt.Sprintf("%15s: %s\n", i, string(marshalIndent(v))))
 		}
 		s = buffer.String()
@@ -359,19 +357,19 @@ func escapeJSONString(s string) (e string) {
 	return
 }
 
-func (o *jsonObject) generateConfParams(pluginName string) (confParams map[string]interface{}) {
-	po := o.executePlugin(pluginName, &defaultPluginInput)
+func (o *jsonObject) generateConfParams(pluginName string, pluginInput jsonObject) jsonObject {
+	po := o.executePlugin(pluginName, pluginInput)
 	m := po.(map[string]interface{})
 	confParamsInterface := m["conf_params"].([]interface{})
 
-	generatedConfig := map[string]interface{}{}
+	confParams := map[string]interface{}{}
 	for _, v := range confParamsInterface {
 		mm := v.(map[string]interface{})
-		generatedConfig[mm["name"].(string)] = mm["default"].(string)
+		confParams[mm["name"].(string)] = mm["default"].(string)
 	}
-	return
+	pluginInput["conf_params"] = confParams
+	return pluginInput
 }
-
 
 func getExpectedOutput() (m jsonObject) {
 	if *expectedOutputFile != "" {
@@ -409,26 +407,25 @@ func main() {
 
 	switch kingpin.MustParse(app.Parse(os.Args[1:])) {
 	case pluginCheck.FullCommand():
-		defaultPluginInput.specifyPluginInput()
-		po := globalOutput.executePlugin(*pluginName, &defaultPluginInput)
-		globalOutput.checkPluginOutput(po, &defaultPluginInput)
+		pi := specifyPluginInput(defaultPluginInput)
+		po := globalOutput.executePlugin(*pluginName, pi)
+		globalOutput.checkPluginOutput(po, pi)
 
 	case pluginTest.FullCommand():
 		*machineReadable = true
 		eo := getExpectedOutput()
-		defaultPluginInput.specifyPluginInput()
-			
-		po := globalOutput.executePlugin(*pluginName, &defaultPluginInput)
-		globalOutput.checkPluginOutput(po, &defaultPluginInput)
+
+		pi := specifyPluginInput(defaultPluginInput)
+		po := globalOutput.executePlugin(*pluginName, pi)
+		globalOutput.checkPluginOutput(po, pi)
 		globalOutput.testOutputAgainst(po, eo)
 
 	case generateDefault.FullCommand():
 		*machineReadable = true
-		defaultPluginInput.specifyPluginInput()
-		g := jsonObject{}
-		defaultPluginInput["conf_params"] = g.generateConfParams(*pluginName)
-		defaultPluginInput.validate()
-		fmt.Printf("%s", defaultPluginInput)
+		pi := specifyPluginInput(defaultPluginInput)
+		gpi := globalOutput.generateConfParams(*pluginName, pi)
+		validate(gpi)
+		globalOutput = gpi
 
 	case printDefault.FullCommand():
 		*machineReadable = true
@@ -436,8 +433,7 @@ func main() {
 
 	case printSpecific.FullCommand():
 		*machineReadable = true
-		defaultPluginInput.specifyPluginInput()
-		globalOutput = defaultPluginInput
+		globalOutput = setPluginAction(defaultPluginInput)
 	}
 	fmt.Printf("%s", globalOutput)
 
