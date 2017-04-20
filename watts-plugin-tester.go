@@ -27,12 +27,12 @@ var (
 
 	app          = kingpin.New("watts-plugin-tester", "Test tool for watts plugins")
 	pluginAction = app.Flag("plugin-action", "The plugin action to run the plugin with. Defaults to 'parameter'").Short('a').String()
-	pluginName   = app.Flag("plugin-name", "Name of the plugin").Short('p').String()
+	pluginName   = app.Flag("plugin", "Name of the plugin").Short('p').String()
 
-	inputComplementFile   = app.Flag("json-file", "Complement the plugin input with a json file").Short('j').String()
-	inputComplementString = app.Flag("json", "Complement the plugin input with a json object (provided as a string)").String()
-	inputComplementConf   = app.Flag("config", "Complement the plugin input with the config parameters from a watts config").Short('c').String()
-	inputComplementConfID = app.Flag("config-identifier", "Service ID for the watts config").Short('i').String()
+	inputComplementFile   = app.Flag("input-file", "Complement the plugin input with a json file").Short('j').String()
+	inputComplementString = app.Flag("input-string", "Complement the plugin input with a json object (provided as a string)").String()
+	inputComplementConf   = app.Flag("input-config", "Complement the plugin input with the config parameters from a watts config").Short('c').String()
+	inputComplementConfID = app.Flag("input-config-identifier", "Service ID for the watts config").Short('i').String()
 
 	machineReadable        = app.Flag("machine", "Be machine readable (all output will be json)").Short('m').Bool()
 	useEnvForParameterPass = app.Flag("env", "Use this environment variable to pass the plugin input to the plugin").Short('e').Bool()
@@ -40,11 +40,11 @@ var (
 
 	pluginCheck = app.Command("check", "Check a plugin against the inbuilt typed schema")
 
-	pluginTest           = app.Command("test", "Test a plugin against the inbuilt typed schema and expected output values")
+	pluginTest           = app.Command("test", "Test a plugin against the inbuilt typed schema and expected output values. Provide an expected json")
 	expectedOutputFile   = pluginTest.Flag("expected-output-file", "Expected output as a file").String()
 	expectedOutputString = pluginTest.Flag("expected-output-string", "Expected output as a string").String()
 
-	pluginTests       = app.Command("tests", "Test a plugin against the inbuilt typed schema and expected output values")
+	pluginTests       = app.Command("tests", "Test a plugin using test config")
 	pluginTestsConfig = pluginTests.Arg("config", "Config file for the tests to run").Required().String()
 
 	printDefault = app.Command("default", "Print the default plugin input as json")
