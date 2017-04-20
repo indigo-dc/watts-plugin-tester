@@ -201,7 +201,8 @@ func marshalPluginInput(pluginInput jsonObject) (s []byte) {
 	return
 }
 
-func specifyPluginInput(pluginInput jsonObject) jsonObject {
+func specifyPluginInput(pluginInput jsonObject) (specificPluginInput jsonObject) {
+	specificPluginInput = pluginInput
 
 	// merge a user provided watts config
 	if *inputComplementConf != "" {
@@ -222,17 +223,12 @@ func specifyPluginInput(pluginInput jsonObject) jsonObject {
 				for i := 1; i < len(matches); i++ {
 					confParams[string(matches[i][1])] = string(matches[i][2])
 				}
-
-				confParamsJSON := marshal(confParams)
-
-				defaultConfParams := json.RawMessage(confParamsJSON)
-				pluginInput["conf_params"] = &defaultConfParams
+				specificPluginInput["conf_params"] = confParams
 			} else {
 				app.Errorf("Could not find configuration parameters for '%s' in '%s'",
 					*inputComplementConfID, *inputComplementConf)
 				os.Exit(exitCodeUserError)
 			}
-
 		} else {
 			app.Errorf("Need a config identifier for config override")
 			os.Exit(exitCodeUserError)
@@ -242,20 +238,21 @@ func specifyPluginInput(pluginInput jsonObject) jsonObject {
 	// merge a user provided json file
 	if *inputComplementFile != "" {
 		overridePluginInput := jsonFileToObject(*inputComplementFile)
-		merge(&overridePluginInput, &pluginInput)
-		pluginInput = overridePluginInput
+		merge(&overridePluginInput, &specificPluginInput)
+		specificPluginInput = overridePluginInput
 	}
 
 	// merge a user provided json string
 	if *inputComplementString != "" {
 		overridePluginInput := jsonStringToObject(*inputComplementString)
-		merge(&overridePluginInput, &pluginInput)
-		pluginInput = overridePluginInput
+		merge(&overridePluginInput, &specificPluginInput)
+		specificPluginInput = overridePluginInput
 	}
 
-	pluginInput = setPluginAction(generateUserID(pluginInput))
-	validate(pluginInput)
-	return pluginInput
+	specificPluginInput = generateUserID(specificPluginInput)
+	specificPluginInput = setPluginAction(specificPluginInput)
+	validate(specificPluginInput)
+	return
 }
 
 func version(pluginInput jsonObject) (version string) {
@@ -413,7 +410,7 @@ func main() {
 
 	case printSpecific.FullCommand():
 		*machineReadable = true
-		globalOutput = setPluginAction(defaultPluginInput)
+		globalOutput = specifyPluginInput(defaultPluginInput)
 	}
 	printGlobalOutput(globalOutput)
 
