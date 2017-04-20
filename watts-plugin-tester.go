@@ -88,12 +88,11 @@ func checkFileExistence(name string) {
 	check(err, exitCodeUserError, "")
 }
 
-func jsonFileToObject(file string) (m jsonObject) {
+func jsonFileToObject(file string) jsonObject {
 	checkFileExistence(file)
 	overrideBytes, err := ioutil.ReadFile(file)
-	check(err, exitCodeUserError, "")
-	m = jsonStringToObject(string(overrideBytes))
-	return
+	check(err, exitCodeUserError, "on reading user provided json file")
+	return jsonStringToObject(string(overrideBytes))
 }
 
 func jsonStringToObject(jsonString string) (m jsonObject) {
@@ -146,21 +145,8 @@ func printGlobalOutput(globalOutput jsonObject) {
 
 // pluginInput processing
 func validate(pluginInput jsonObject) {
-	var i interface{}
-
-	bs := marshalIndent(pluginInput)
-	err := json.Unmarshal(bs, &i)
-	check(err, exitCodeInternalError, "unmarshal error")
-	path, err := schemes.PluginInputScheme.Validate(i)
-
-	if err != nil {
-		app.Errorf("Unable to validate plugin input")
-		fmt.Printf("%s: %s\n", "Plugin Input", bs)
-		fmt.Printf("%s: %s\n", "Error", err)
-		fmt.Printf("%s: %s\n", "Path", path)
-		os.Exit(exitCodePluginError)
-	}
-
+	path, err := schemes.PluginInputScheme.Validate(pluginInput)
+	check(err, exitCodePluginError, fmt.Sprintf("on validating plugin input at path %s", path))
 	return
 }
 
