@@ -27,12 +27,12 @@ var (
 
 	app          = kingpin.New("watts-plugin-tester", "Test tool for watts plugins")
 	pluginAction = app.Flag("plugin-action", "The plugin action to run the plugin with. Defaults to 'parameter'").Short('a').String()
-	pluginName   = app.Flag("plugin-name", "Name of the plugin").Short('p').String()
+	pluginName   = app.Flag("plugin", "Name of the plugin").Short('p').String()
 
-	inputComplementFile   = app.Flag("json-file", "Complement the plugin input with a json file").Short('j').String()
-	inputComplementString = app.Flag("json", "Complement the plugin input with a json object (provided as a string)").String()
-	inputComplementConf   = app.Flag("config", "Complement the plugin input with the config parameters from a watts config").Short('c').String()
-	inputComplementConfID = app.Flag("config-identifier", "Service ID for the watts config").Short('i').String()
+	inputComplementFile   = app.Flag("input-file", "Complement the plugin input with a json file").Short('j').String()
+	inputComplementString = app.Flag("input-string", "Complement the plugin input with a json object (provided as a string)").String()
+	inputComplementConf   = app.Flag("input-config", "Complement the plugin input with the config parameters from a watts config").Short('c').String()
+	inputComplementConfID = app.Flag("input-config-identifier", "Service ID for the watts config").Short('i').String()
 
 	machineReadable        = app.Flag("machine", "Be machine readable (all output will be json)").Short('m').Bool()
 	useEnvForParameterPass = app.Flag("env", "Use this environment variable to pass the plugin input to the plugin").Short('e').Bool()
@@ -40,9 +40,12 @@ var (
 
 	pluginCheck = app.Command("check", "Check a plugin against the inbuilt typed schema")
 
-	pluginTest           = app.Command("test", "Test a plugin against the inbuilt typed schema and expected output values")
+	pluginTest           = app.Command("test", "Test a plugin against the inbuilt typed schema and expected output values. Provide an expected json")
 	expectedOutputFile   = pluginTest.Flag("expected-output-file", "Expected output as a file").String()
 	expectedOutputString = pluginTest.Flag("expected-output-string", "Expected output as a string").String()
+
+	pluginTests       = app.Command("tests", "Test a plugin using test config")
+	pluginTestsConfig = pluginTests.Arg("config", "Config file for the tests to run").Required().String()
 
 	printDefault = app.Command("default", "Print the default plugin input as json")
 
@@ -270,12 +273,13 @@ func getExpectedOutput() (expectedOutput jsonObject) {
 }
 
 // plugin execution
-func (o *jsonObject) executePlugin(pluginName string, pluginInput jsonObject) (pluginOutput jsonObject) {
+func (o *jsonObject) executePlugin(pluginName string, pluginInput jsonObject) (pluginOutput interface{}) {
 	checkFileExistence(pluginName)
 	inputBase64 := base64.StdEncoding.EncodeToString(marshalPluginInput(pluginInput))
 
-	o.print("plugin_name", pluginName)
-	o.print("plugin_input", pluginInput)
+	plugin := jsonObject{}
+	plugin.print("name", pluginName)
+	plugin.print("input", pluginInput)
 
 	var cmd *exec.Cmd
 	if *useEnvForParameterPass {
@@ -291,64 +295,71 @@ func (o *jsonObject) executePlugin(pluginName string, pluginInput jsonObject) (p
 	duration := fmt.Sprintf("%s", timeAfterExec.Sub(timeBeforeExec))
 
 	if err != nil {
-		o.print("result", "error")
-		o.print("error", fmt.Sprint(err))
-		o.print("plugin_output", string(outputBytes))
-		o.print("description", "error executing the plugin")
+		plugin.print("result", "error")
+		plugin.print("error", fmt.Sprint(err))
+		plugin.print("plugin_output", string(outputBytes))
+		plugin.print("description", "error executing the plugin")
 		exitCode = 3
 		return
 	}
 
-	o.print("plugin_time", duration)
+	plugin.print("duration", duration)
 
 	err = json.Unmarshal(outputBytes, &pluginOutput)
 	if err != nil {
-		o.print("result", "error")
-		o.print("description", "error processing the output of the plugin")
-		o.print("error", fmt.Sprint(err))
+		plugin.print("result", "error")
+		plugin.print("description", "Error processing the output of the plugin")
+		plugin.print("error", fmt.Sprint(err))
 		exitCode = 1
 		return
 	}
-	o.print("plugin_output", pluginOutput)
+
+	plugin.print("output", pluginOutput)
+	o.print("plugin", plugin)
 	return
 }
 
-func (o *jsonObject) checkPluginOutput(pluginOutput jsonObject, pluginInput jsonObject) {
+func (o *jsonObject) checkPluginOutput(pluginOutput interface{}, pluginInput jsonObject) bool {
 	version := version(pluginInput)
 	action := pluginInput["action"].(string)
 
 	path, err := schemes.WattsSchemes[version][action].Validate(pluginOutput)
 	if err != nil {
 		o.print("result", "error")
-		o.print("description", fmt.Sprintf("validation error %s", err))
-		o.print("path", path)
-		exitCode = 1
-		return
+		o.print("description", fmt.Sprintf("Validation error %s at %s", err, path))
+		return false
 	}
 
 	o.print("result", "ok")
-	o.print("description", "validation passed")
-	return
+	o.print("description", "Validation passed")
+	return true
 }
 
-func (o *jsonObject) testPluginOutput(pluginOutput jsonObject, expectedOutput jsonObject) {
-	o.print("plugin_output_expected", expectedOutput)
+func (o *jsonObject) testPluginOutput(pluginOutput interface{}, pluginInput jsonObject, expectedOutput jsonObject) bool {
+	if !o.checkPluginOutput(pluginOutput, pluginInput) {
+		return false
+	}
+
+	plugin := (*o)["plugin"].(jsonObject)
+	plugin.print("output_expected", expectedOutput)
+
 	for i, v := range expectedOutput {
-		if o := pluginOutput[i]; o != v {
-			app.Errorf("Unexpected output for key %s: '%s' instead of '%s'", i, o, v)
-			os.Exit(exitCodePluginError)
+		if po := pluginOutput.(map[string]interface{})[i]; po != v {
+			o.print("result", "error")
+			o.print("description", fmt.Sprintf(
+				"Unexpected output for key %s: '%s' instead of '%s'", i, po, v))
+			return false
 		}
 	}
 
 	o.print("result", "ok")
 	o.print("description", "Test passed. All output as expected")
-	fmt.Println(*o)
-	return
+	return true
 }
 
 func (o *jsonObject) generateConfParams(pluginName string, pluginInput jsonObject) jsonObject {
 	po := o.executePlugin(pluginName, pluginInput)
-	confParamsInterface := po["conf_params"].([]interface{})
+	confParamsInterface := po.(map[string]([]interface{}))["conf_params"]
 
 	confParams := map[string]interface{}{}
 	for _, v := range confParamsInterface {
@@ -359,25 +370,66 @@ func (o *jsonObject) generateConfParams(pluginName string, pluginInput jsonObjec
 	return pluginInput
 }
 
+func (o *jsonObject) runTests(config jsonObject) bool {
+	pluginName := config["exec_file"].(string)
+	tests := config["tests"].([]interface{})
+	testResultList := []jsonObject{}
+	testResult := map[string]int{"total": 0, "passed": 0, "failed": 0}
+
+	for _, t := range tests {
+		testResult["total"]++
+
+		testOutput := jsonObject{}
+		test := t.(map[string]interface{})
+		pi := jsonObject(test["input"].(map[string]interface{}))
+		eo := jsonObject(test["expected_output"].(map[string]interface{}))
+		po := testOutput.executePlugin(pluginName, pi)
+
+		if testOutput.testPluginOutput(po, pi, eo) {
+			testResult["passed"]++
+		} else {
+			testResult["failed"]++
+		}
+		testResultList = append(testResultList, testOutput)
+	}
+	o.print("tests", testResultList)
+	o.print("result", "ok")
+	o.print("stats", testResult)
+
+	if testResult["failed"] > 0 {
+		return false
+	} else {
+		return true
+	}
+}
+
 // main
 func main() {
 	app.Author("Lukas Burgey @ KIT within the INDIGO DataCloud Project")
-	app.Version("1.0.1")
+	app.Version("2.0.0")
 	globalOutput := jsonObject{}
 
 	switch kingpin.MustParse(app.Parse(os.Args[1:])) {
 	case pluginCheck.FullCommand():
 		pi := specifyPluginInput(defaultPluginInput)
 		po := globalOutput.executePlugin(*pluginName, pi)
-		globalOutput.checkPluginOutput(po, pi)
+		if !globalOutput.checkPluginOutput(po, pi) {
+			exitCode = exitCodePluginError
+		}
 
 	case pluginTest.FullCommand():
-		eo := getExpectedOutput()
-
 		pi := specifyPluginInput(defaultPluginInput)
 		po := globalOutput.executePlugin(*pluginName, pi)
-		globalOutput.checkPluginOutput(po, pi)
-		globalOutput.testPluginOutput(po, eo)
+		eo := getExpectedOutput()
+		if !globalOutput.testPluginOutput(po, pi, eo) {
+			exitCode = exitCodePluginError
+		}
+
+	case pluginTests.FullCommand():
+		config := jsonFileToObject(*pluginTestsConfig)
+		if !globalOutput.runTests(config) {
+			exitCode = exitCodePluginError
+		}
 
 	case generateDefault.FullCommand():
 		*machineReadable = true
@@ -394,7 +446,7 @@ func main() {
 		*machineReadable = true
 		globalOutput = specifyPluginInput(defaultPluginInput)
 	}
-	printGlobalOutput(globalOutput)
 
+	printGlobalOutput(globalOutput)
 	os.Exit(exitCode)
 }
