@@ -362,7 +362,7 @@ func (o *jsonObject) generateConfParams(pluginName string, pluginInput jsonObjec
 // main
 func main() {
 	app.Author("Lukas Burgey @ KIT within the INDIGO DataCloud Project")
-	app.Version("1.0.0")
+	app.Version("1.0.1")
 	globalOutput := jsonObject{}
 
 	switch kingpin.MustParse(app.Parse(os.Args[1:])) {
@@ -372,7 +372,6 @@ func main() {
 		globalOutput.checkPluginOutput(po, pi)
 
 	case pluginTest.FullCommand():
-		*machineReadable = true
 		eo := getExpectedOutput()
 
 		pi := specifyPluginInput(defaultPluginInput)
