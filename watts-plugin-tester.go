@@ -17,7 +17,6 @@ import (
 )
 
 type jsonObject map[string]interface{}
-type pluginOutput interface{}
 
 var (
 	exitCode                     = 0
@@ -55,10 +54,10 @@ var (
 	outputIndentation = "                 "
 	outputTabWidth    = "    "
 
-	defaultwattVersionString = "1.0.0"
-	defaultPluginInput       = jsonObject{
+	defaultWattsVersion = "1.0.0"
+	defaultPluginInput  = jsonObject{
 		"action":        "parameter",
-		"watts_version": "1.0.0",
+		"watts_version": defaultWattsVersion,
 		"cred_state":    "undefined",
 		"conf_params":   map[string]interface{}{},
 		"params":        map[string]interface{}{},
@@ -251,7 +250,7 @@ func version(pluginInput jsonObject) (version string) {
 
 	if _, versionFound := schemes.WattsSchemes[string(extractedVersion)]; !versionFound {
 		extractedVersion = versionExtractor.Find(pluginInput["watts_version"].([]byte))
-		pluginInput["watts_version"] = defaultwattVersionString
+		pluginInput["watts_version"] = defaultWattsVersion
 	}
 
 	version = string(extractedVersion)
@@ -271,7 +270,7 @@ func getExpectedOutput() (expectedOutput jsonObject) {
 }
 
 // plugin execution
-func (o *jsonObject) executePlugin(pluginName string, pluginInput jsonObject) (po pluginOutput) {
+func (o *jsonObject) executePlugin(pluginName string, pluginInput jsonObject) (pluginOutput jsonObject) {
 	checkFileExistence(pluginName)
 	inputBase64 := base64.StdEncoding.EncodeToString(marshalPluginInput(pluginInput))
 
@@ -302,23 +301,23 @@ func (o *jsonObject) executePlugin(pluginName string, pluginInput jsonObject) (p
 
 	o.print("plugin_time", duration)
 
-	err = json.Unmarshal(outputBytes, &po)
+	err = json.Unmarshal(outputBytes, &pluginOutput)
 	if err != nil {
 		o.print("result", "error")
 		o.print("description", "error processing the output of the plugin")
-		o.print("error", fmt.Sprintf("%s", err))
+		o.print("error", fmt.Sprint(err))
 		exitCode = 1
 		return
 	}
-	o.print("plugin_output", po)
+	o.print("plugin_output", pluginOutput)
 	return
 }
 
-func (o *jsonObject) checkPluginOutput(po pluginOutput, pluginInput jsonObject) {
+func (o *jsonObject) checkPluginOutput(pluginOutput jsonObject, pluginInput jsonObject) {
 	version := version(pluginInput)
 	action := pluginInput["action"].(string)
 
-	path, err := schemes.WattsSchemes[version][action].Validate(po)
+	path, err := schemes.WattsSchemes[version][action].Validate(pluginOutput)
 	if err != nil {
 		o.print("result", "error")
 		o.print("description", fmt.Sprintf("validation error %s", err))
@@ -332,11 +331,10 @@ func (o *jsonObject) checkPluginOutput(po pluginOutput, pluginInput jsonObject) 
 	return
 }
 
-func (o *jsonObject) testPluginOutput(po pluginOutput, expectedOutput jsonObject) {
+func (o *jsonObject) testPluginOutput(pluginOutput jsonObject, expectedOutput jsonObject) {
 	o.print("plugin_output_expected", expectedOutput)
-	poj := po.(jsonObject)
 	for i, v := range expectedOutput {
-		if o := poj[i]; o != v {
+		if o := pluginOutput[i]; o != v {
 			app.Errorf("Unexpected output for key %s: '%s' instead of '%s'", i, o, v)
 			os.Exit(exitCodePluginError)
 		}
@@ -350,8 +348,7 @@ func (o *jsonObject) testPluginOutput(po pluginOutput, expectedOutput jsonObject
 
 func (o *jsonObject) generateConfParams(pluginName string, pluginInput jsonObject) jsonObject {
 	po := o.executePlugin(pluginName, pluginInput)
-	m := po.(map[string]interface{})
-	confParamsInterface := m["conf_params"].([]interface{})
+	confParamsInterface := po["conf_params"].([]interface{})
 
 	confParams := map[string]interface{}{}
 	for _, v := range confParamsInterface {
