@@ -272,6 +272,11 @@ func getExpectedOutput() (expectedOutput jsonObject) {
 	return
 }
 
+func (o *jsonObject) terminate(exitCode int) {
+	printGlobalOutput(*o)
+	os.Exit(exitCode)
+}
+
 // plugin execution
 func (o *jsonObject) executePlugin(pluginName string, pluginInput jsonObject) (pluginOutput interface{}) {
 	checkFileExistence(pluginName)
@@ -293,25 +298,27 @@ func (o *jsonObject) executePlugin(pluginName string, pluginInput jsonObject) (p
 	outputBytes, err := cmd.CombinedOutput()
 	timeAfterExec := time.Now()
 	duration := fmt.Sprintf("%s", timeAfterExec.Sub(timeBeforeExec))
+	plugin.print("duration", duration)
 
 	if err != nil {
 		plugin.print("result", "error")
 		plugin.print("error", fmt.Sprint(err))
-		plugin.print("plugin_output", string(outputBytes))
 		plugin.print("description", "error executing the plugin")
-		exitCode = 3
-		return
-	}
 
-	plugin.print("duration", duration)
+		plugin.print("output", outputBytes)
+		o.print("plugin", plugin)
+		o.terminate(exitCodePluginExecutionError)
+	}
 
 	err = json.Unmarshal(outputBytes, &pluginOutput)
 	if err != nil {
 		plugin.print("result", "error")
-		plugin.print("description", "Error processing the output of the plugin")
 		plugin.print("error", fmt.Sprint(err))
-		exitCode = 1
-		return
+		plugin.print("description", "Error processing the output of the plugin")
+
+		plugin.print("output", outputBytes)
+		o.print("plugin", plugin)
+		o.terminate(exitCodeInternalError)
 	}
 
 	plugin.print("output", pluginOutput)
@@ -358,11 +365,11 @@ func (o *jsonObject) testPluginOutput(pluginOutput interface{}, pluginInput json
 }
 
 func (o *jsonObject) generateConfParams(pluginName string, pluginInput jsonObject) jsonObject {
-	po := o.executePlugin(pluginName, pluginInput)
-	confParamsInterface := po.(map[string]([]interface{}))["conf_params"]
+	pluginOutput := o.executePlugin(pluginName, pluginInput)
+	confParamsList := pluginOutput.(map[string]interface{})["conf_params"].([]interface{})
 
-	confParams := map[string]interface{}{}
-	for _, v := range confParamsInterface {
+	confParams := jsonObject{}
+	for _, v := range confParamsList {
 		mm := v.(map[string]interface{})
 		confParams[mm["name"].(string)] = mm["default"].(string)
 	}
