@@ -13,7 +13,6 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
-	"strings"
 	"time"
 )
 
@@ -109,30 +108,6 @@ func merge(dest *jsonObject, src *jsonObject) {
 	return
 }
 
-func byteToRawMessage(inputBytes []byte) (rawMessage json.RawMessage) {
-	rawMessage = json.RawMessage(``)
-
-	testJSONObject := map[string]interface{}{}
-	err := json.Unmarshal(inputBytes, &testJSONObject)
-	if err != nil {
-		rawMessage = toRawJSONString(escapeJSONString(string(inputBytes)))
-	} else {
-		rawMessage = json.RawMessage(marshalIndent(testJSONObject))
-	}
-	return
-}
-
-func toRawJSONString(str string) (jo json.RawMessage) {
-	jo = json.RawMessage(fmt.Sprintf("\"%s\"", str))
-	return
-}
-
-func escapeJSONString(s string) (e string) {
-	e = strings.Replace(s, "\n", "", -1)
-	e = strings.Replace(e, "\"", "\\\"", -1)
-	return
-}
-
 func marshal(i interface{}) (bytes []byte) {
 	bytes, err := json.Marshal(i)
 	check(err, exitCodeInternalError, "marshal")
@@ -213,8 +188,7 @@ func generateUserID(pluginInput jsonObject) jsonObject {
 func setPluginAction(pluginInput jsonObject) jsonObject {
 	if *pluginAction != "" {
 		validatePluginAction(*pluginAction)
-		defaultAction := toRawJSONString(*pluginAction)
-		pluginInput["action"] = &defaultAction
+		pluginInput["action"] = *pluginAction
 	} else {
 		action := pluginInput["action"].(string)
 		validatePluginAction(action)
