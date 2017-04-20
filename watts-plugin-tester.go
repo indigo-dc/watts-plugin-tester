@@ -71,6 +71,24 @@ var (
 	}
 )
 
+// helpers
+func check(err error, exitCode int, msg string) {
+	if err != nil {
+		if msg != "" {
+			app.Errorf("%s - %s", err, msg)
+		} else {
+			app.Errorf("%s", err)
+		}
+		os.Exit(exitCode)
+	}
+	return
+}
+
+func checkFileExistence(name string) {
+	_, err := os.Stat(name)
+	check(err, exitCodeUserError, "")
+}
+
 func jsonFileToObject(file string) (m jsonObject) {
 	checkFileExistence(file)
 	overrideBytes, err := ioutil.ReadFile(file)
@@ -91,6 +109,65 @@ func merge(dest *jsonObject, src *jsonObject) {
 	return
 }
 
+func byteToRawMessage(inputBytes []byte) (rawMessage json.RawMessage) {
+	rawMessage = json.RawMessage(``)
+
+	testJSONObject := map[string]interface{}{}
+	err := json.Unmarshal(inputBytes, &testJSONObject)
+	if err != nil {
+		rawMessage = toRawJSONString(escapeJSONString(string(inputBytes)))
+	} else {
+		rawMessage = json.RawMessage(marshalIndent(testJSONObject))
+	}
+	return
+}
+
+func toRawJSONString(str string) (jo json.RawMessage) {
+	jo = json.RawMessage(fmt.Sprintf("\"%s\"", str))
+	return
+}
+
+func escapeJSONString(s string) (e string) {
+	e = strings.Replace(s, "\n", "", -1)
+	e = strings.Replace(e, "\"", "\\\"", -1)
+	return
+}
+
+func marshal(i interface{}) (bytes []byte) {
+	bytes, err := json.Marshal(i)
+	check(err, exitCodeInternalError, "marshal")
+	return
+}
+
+func marshalIndent(i interface{}) (bytes []byte) {
+	indentation := ""
+	if !*machineReadable {
+		indentation = outputIndentation
+	}
+
+	bytes, err := json.MarshalIndent(i, indentation, outputTabWidth)
+	check(err, exitCodeInternalError, "marshalIndent")
+	return bytes
+}
+
+func (o *jsonObject) print(a string, b interface{}) {
+	(*o)[a] = b
+}
+
+func (o jsonObject) String() (s string) {
+	if !*machineReadable {
+		var buffer bytes.Buffer
+		for i, v := range o {
+			buffer.WriteString(fmt.Sprintf("%15s: %s\n", i, string(marshalIndent(v))))
+		}
+		s = buffer.String()
+	} else {
+		s = string(marshalIndent(&o))
+	}
+	return
+}
+
+// pluginInput processing
 func validate(pluginInput jsonObject) {
 	var i interface{}
 
@@ -108,6 +185,13 @@ func validate(pluginInput jsonObject) {
 	}
 
 	return
+}
+
+func validatePluginAction(action string) {
+	if action != "request" && action != "parameter" && action != "revoke" {
+		app.Errorf("invalid plugin action %s", action)
+		os.Exit(exitCodeUserError)
+	}
 }
 
 func generateUserID(pluginInput jsonObject) jsonObject {
@@ -215,6 +299,19 @@ func version(pluginInput jsonObject) (version string) {
 	return
 }
 
+func getExpectedOutput() (expectedOutput jsonObject) {
+	if *expectedOutputFile != "" {
+		expectedOutput = jsonFileToObject(*expectedOutputFile)
+	} else if *expectedOutputString != "" {
+		expectedOutput = jsonStringToObject(*expectedOutputString)
+	} else {
+		app.Errorf("No expected output provided")
+		os.Exit(exitCodeUserError)
+	}
+	return
+}
+
+// plugin execution
 func (o *jsonObject) executePlugin(pluginName string, pluginInput jsonObject) (po pluginOutput) {
 	checkFileExistence(pluginName)
 	inputBase64 := base64.StdEncoding.EncodeToString(marshalPluginInput(pluginInput))
@@ -276,11 +373,7 @@ func (o *jsonObject) checkPluginOutput(po pluginOutput, pluginInput jsonObject) 
 	return
 }
 
-func (o *jsonObject) print(a string, b interface{}) {
-	(*o)[a] = b
-}
-
-func (o *jsonObject) testOutputAgainst(po pluginOutput, expectedOutput jsonObject) {
+func (o *jsonObject) testPluginOutput(po pluginOutput, expectedOutput jsonObject) {
 	o.print("plugin_output_expected", expectedOutput)
 	poj := po.(jsonObject)
 	for i, v := range expectedOutput {
@@ -293,67 +386,6 @@ func (o *jsonObject) testOutputAgainst(po pluginOutput, expectedOutput jsonObjec
 	o.print("result", "ok")
 	o.print("description", "Test passed. All output as expected")
 	fmt.Println(*o)
-	return
-}
-
-func (o jsonObject) String() (s string) {
-	if !*machineReadable {
-		var buffer bytes.Buffer
-		for i, v := range o {
-			buffer.WriteString(fmt.Sprintf("%15s: %s\n", i, string(marshalIndent(v))))
-		}
-		s = buffer.String()
-	} else {
-		s = string(marshalIndent(&o))
-	}
-	return
-}
-
-func check(err error, exitCode int, msg string) {
-	if err != nil {
-		if msg != "" {
-			app.Errorf("%s - %s", err, msg)
-		} else {
-			app.Errorf("%s", err)
-		}
-		os.Exit(exitCode)
-	}
-	return
-}
-
-func checkFileExistence(name string) {
-	_, err := os.Stat(name)
-	check(err, exitCodeUserError, "")
-}
-
-func validatePluginAction(action string) {
-	if action != "request" && action != "parameter" && action != "revoke" {
-		app.Errorf("invalid plugin action %s", action)
-		os.Exit(exitCodeUserError)
-	}
-}
-
-func byteToRawMessage(inputBytes []byte) (rawMessage json.RawMessage) {
-	rawMessage = json.RawMessage(``)
-
-	testJSONObject := map[string]interface{}{}
-	err := json.Unmarshal(inputBytes, &testJSONObject)
-	if err != nil {
-		rawMessage = toRawJSONString(escapeJSONString(string(inputBytes)))
-	} else {
-		rawMessage = json.RawMessage(marshalIndent(testJSONObject))
-	}
-	return
-}
-
-func toRawJSONString(str string) (jo json.RawMessage) {
-	jo = json.RawMessage(fmt.Sprintf("\"%s\"", str))
-	return
-}
-
-func escapeJSONString(s string) (e string) {
-	e = strings.Replace(s, "\n", "", -1)
-	e = strings.Replace(e, "\"", "\\\"", -1)
 	return
 }
 
@@ -371,35 +403,7 @@ func (o *jsonObject) generateConfParams(pluginName string, pluginInput jsonObjec
 	return pluginInput
 }
 
-func getExpectedOutput() (m jsonObject) {
-	if *expectedOutputFile != "" {
-		m = jsonFileToObject(*expectedOutputFile)
-	} else if *expectedOutputString != "" {
-		m = jsonStringToObject(*expectedOutputString)
-	} else {
-		app.Errorf("No expected output provided")
-		os.Exit(exitCodeUserError)
-	}
-	return
-}
-
-func marshal(i interface{}) (bytes []byte) {
-	bytes, err := json.Marshal(i)
-	check(err, exitCodeInternalError, "marshal")
-	return
-}
-
-func marshalIndent(i interface{}) (bytes []byte) {
-	indentation := ""
-	if !*machineReadable {
-		indentation = outputIndentation
-	}
-
-	bytes, err := json.MarshalIndent(i, indentation, outputTabWidth)
-	check(err, exitCodeInternalError, "marshalIndent")
-	return bytes
-}
-
+// main
 func main() {
 	app.Author("Lukas Burgey @ KIT within the INDIGO DataCloud Project")
 	app.Version("1.0.0")
@@ -418,7 +422,7 @@ func main() {
 		pi := specifyPluginInput(defaultPluginInput)
 		po := globalOutput.executePlugin(*pluginName, pi)
 		globalOutput.checkPluginOutput(po, pi)
-		globalOutput.testOutputAgainst(po, eo)
+		globalOutput.testPluginOutput(po, eo)
 
 	case generateDefault.FullCommand():
 		*machineReadable = true
