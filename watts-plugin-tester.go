@@ -372,9 +372,12 @@ func (o *jsonObject) generateConfParams(pluginName string, pluginInput jsonObjec
 
 func (o *jsonObject) runTests(config jsonObject) bool {
 	pluginName := config["exec_file"].(string)
-	tests := config["tests"].([]interface{})
-	testResultList := []jsonObject{}
+	tests := config["tests"].([]interface{ })
+	testLists := map[string][]jsonObject{}
+	testPassedList := []jsonObject{}
+	testFailedList := []jsonObject{}
 	testResult := map[string]int{"total": 0, "passed": 0, "failed": 0}
+
 
 	for _, t := range tests {
 		testResult["total"]++
@@ -382,17 +385,21 @@ func (o *jsonObject) runTests(config jsonObject) bool {
 		testOutput := jsonObject{}
 		test := t.(map[string]interface{})
 		pi := jsonObject(test["input"].(map[string]interface{}))
+		spi := specifyPluginInput(pi)
 		eo := jsonObject(test["expected_output"].(map[string]interface{}))
 		po := testOutput.executePlugin(pluginName, pi)
 
-		if testOutput.testPluginOutput(po, pi, eo) {
+		if testOutput.testPluginOutput(po, spi, eo) {
 			testResult["passed"]++
+			testPassedList = append(testPassedList, testOutput)
 		} else {
 			testResult["failed"]++
+			testFailedList = append(testFailedList, testOutput)
 		}
-		testResultList = append(testResultList, testOutput)
 	}
-	o.print("tests", testResultList)
+	testLists["passed"] = testPassedList
+	testLists["failed"] = testFailedList
+	o.print("tests", testLists)
 	o.print("result", "ok")
 	o.print("stats", testResult)
 
