@@ -17,10 +17,8 @@ import (
 	"time"
 )
 
-type pluginInput map[string](*json.RawMessage)
+type jsonObject map[string]interface{}
 type pluginOutput interface{}
-type pluginOutputJSON map[string]interface{}
-type globalOutput map[string](*json.RawMessage)
 
 var (
 	exitCode                     = 0
@@ -54,58 +52,46 @@ var (
 
 	generateDefault = app.Command("generate", "Generate a fitting json input file for the given plugin")
 
-	outputMessages = []json.RawMessage{}
-
 	// for marshalIndent
 	outputIndentation = "                 "
 	outputTabWidth    = "    "
 
 	defaultwattVersionString = "1.0.0"
-	defaultWattsVersion      = toRawJSONString(defaultwattVersionString)
-	defaultCredentialState   = toRawJSONString("undefined")
-	defaultConfParams        = json.RawMessage(`{}`)
-	defaultParams            = json.RawMessage(`{}`)
-	defaultAdditionalLogins  = json.RawMessage(`[]`)
-	defaultUserInfo          = json.RawMessage(`{
-		"iss": "https://issuer.example.com",
-		"sub": "123456789"
-	}`)
-
-	defaultAction      = json.RawMessage(`"parameter"`)
-	defaultWattsUserID = json.RawMessage(``)
-
-	defaultPluginInput = pluginInput{
-		"watts_version":     &defaultWattsVersion,
-		"cred_state":        &defaultCredentialState,
-		"conf_params":       &defaultConfParams,
-		"params":            &defaultParams,
-		"user_info":         &defaultUserInfo,
-		"additional_logins": &defaultAdditionalLogins,
+	defaultPluginInput = jsonObject{
+		"action": "parameter",
+		"watts_version":     "1.0.0",
+		"cred_state":        "undefined",
+		"conf_params":       map[string]interface{}{},
+		"params":            map[string]interface{}{},
+		"user_info":         map[string]interface{}{
+			"iss": "https://issuer.example.com",
+			"sub": "123456789",
+		},
+		"additional_logins": []interface{}{},
 	}
 )
 
-func jsonFileToPluginInput(file string) (p pluginInput) {
+func jsonFileToObject(file string) (m jsonObject) {
 	checkFileExistence(file)
 	overrideBytes, err := ioutil.ReadFile(file)
 	check(err, exitCodeUserError, "")
-	p = jsonStringToPluginInput(string(overrideBytes))
+	m = jsonStringToObject(string(overrideBytes))
 	return
 }
 
-func jsonStringToPluginInput(jsonString string) (p pluginInput) {
-	p = pluginInput{}
-	err := json.Unmarshal([]byte(jsonString), &p)
+func jsonStringToObject(jsonString string) (m jsonObject) {
+	err := json.Unmarshal([]byte(jsonString), &m)
 	check(err, exitCodeUserError, "on unmarshaling user provided json string")
 	return
 }
 
-func merge(dest *pluginInput, src *pluginInput) {
+func merge(dest *jsonObject, src *jsonObject) {
 	err := mergo.Merge(dest, src)
 	check(err, exitCodeInternalError, "merging plugin inputs")
 	return
 }
 
-func (p *pluginInput) validate() {
+func (p *jsonObject) validate() {
 	var i interface{}
 
 	bs := marshalIndent(p)
@@ -124,47 +110,39 @@ func (p *pluginInput) validate() {
 	return
 }
 
-func (p *pluginInput) generateUserID() {
-	userIDJSON := map[string](*json.RawMessage){}
-	userIDJSONReduced := map[string](*json.RawMessage){}
+func (p *jsonObject) generateUserID() {
+	userIDJSONReduced := map[string]interface{}{}
 
-	userInfo := *(*p)["user_info"]
-
-	err := json.Unmarshal(userInfo, &userIDJSON)
-	check(err, exitCodeInternalError, "Error unmarshaling watts_userid")
-
-	userIDJSONReduced["issuer"] = userIDJSON["iss"]
-	userIDJSONReduced["subject"] = userIDJSON["sub"]
+	userInfo := (*p)["user_info"].(map[string]interface{})
+	userIDJSONReduced["issuer"] = userInfo["iss"]
+	userIDJSONReduced["subject"] = userInfo["sub"]
 
 	j := marshal(userIDJSONReduced)
 
 	escaped := bytes.Replace(j, []byte{'/'}, []byte{'\\', '/'}, -1)
-	defaultWattsUserID = toRawJSONString(base64url.Encode(escaped))
-	(*p)["watts_userid"] = &defaultWattsUserID
+	(*p)["watts_userid"] = base64url.Encode(escaped)
 	return
 }
 
-func (p *pluginInput) setPluginAction() {
+func (p *jsonObject) setPluginAction() {
 	if *pluginAction != "" {
 		validatePluginAction(*pluginAction)
-		defaultAction = toRawJSONString(*pluginAction)
+		defaultAction := toRawJSONString(*pluginAction)
 		(*p)["action"] = &defaultAction
 	} else {
-		action := ""
-		err := json.Unmarshal(*(*p)["action"], &action)
-		check(err, exitCodeInternalError, "setPluginAction")
+		action := (*p)["action"].(string)
 		validatePluginAction(action)
 	}
 
 	return
 }
 
-func (p *pluginInput) marshalPluginInput() (s []byte) {
+func (p *jsonObject) marshalPluginInput() (s []byte) {
 	s = marshalIndent(*p)
 	return
 }
 
-func (p *pluginInput) specifyPluginInput() {
+func (p *jsonObject) specifyPluginInput() {
 
 	// merge a user provided watts config
 	if *inputComplementConf != "" {
@@ -188,7 +166,7 @@ func (p *pluginInput) specifyPluginInput() {
 
 				confParamsJSON := marshal(confParams)
 
-				defaultConfParams = json.RawMessage(confParamsJSON)
+				defaultConfParams := json.RawMessage(confParamsJSON)
 				(*p)["conf_params"] = &defaultConfParams
 			} else {
 				app.Errorf("Could not find configuration parameters for '%s' in '%s'",
@@ -204,14 +182,14 @@ func (p *pluginInput) specifyPluginInput() {
 
 	// merge a user provided json file
 	if *inputComplementFile != "" {
-		overridePluginInput := jsonFileToPluginInput(*inputComplementFile)
+		overridePluginInput := jsonFileToObject(*inputComplementFile)
 		merge(&overridePluginInput, p)
 		*p = overridePluginInput
 	}
 
 	// merge a user provided json string
 	if *inputComplementString != "" {
-		overridePluginInput := jsonStringToPluginInput(*inputComplementString)
+		overridePluginInput := jsonStringToObject(*inputComplementString)
 		merge(&overridePluginInput, p)
 		*p = overridePluginInput
 	}
@@ -221,7 +199,7 @@ func (p *pluginInput) specifyPluginInput() {
 	p.validate()
 }
 
-func (p *pluginInput) version() (version string) {
+func (p *jsonObject) version() (version string) {
 	versionJSON := (*p)["watts_version"]
 	versionBytes, err := json.Marshal(&versionJSON)
 	check(err, exitCodeInternalError, "")
@@ -230,21 +208,21 @@ func (p *pluginInput) version() (version string) {
 	extractedVersion := versionExtractor.Find(versionBytes)
 
 	if _, versionFound := schemes.WattsSchemes[string(extractedVersion)]; !versionFound {
-		extractedVersion = versionExtractor.Find(defaultWattsVersion)
-		(*p)["watts_version"] = &defaultWattsVersion
+		extractedVersion = versionExtractor.Find((*p)["watts_version"].([]byte))
+		(*p)["watts_version"] = defaultwattVersionString
 	}
 
 	version = string(extractedVersion)
 	return
 }
 
-func (o *globalOutput) executePlugin(pluginName string, p *pluginInput) (po pluginOutput) {
+func (o *jsonObject) executePlugin(pluginName string, p *jsonObject) (po pluginOutput) {
 	checkFileExistence(pluginName)
-	pluginInputJSON := p.marshalPluginInput()
-	inputBase64 := base64.StdEncoding.EncodeToString(pluginInputJSON)
+	jsonObjectJSON := p.marshalPluginInput()
+	inputBase64 := base64.StdEncoding.EncodeToString(jsonObjectJSON)
 
 	o.print("plugin_name", pluginName)
-	o.printJSON("plugin_input", json.RawMessage(pluginInputJSON))
+	o.print("plugin_input", p)
 
 	var cmd *exec.Cmd
 	if *useEnvForParameterPass {
@@ -262,33 +240,29 @@ func (o *globalOutput) executePlugin(pluginName string, p *pluginInput) (po plug
 	if err != nil {
 		o.print("result", "error")
 		o.print("error", fmt.Sprint(err))
-		o.printArbitrary("plugin_output", string(outputBytes))
+		o.print("plugin_output", string(outputBytes))
 		o.print("description", "error executing the plugin")
 		exitCode = 3
 		return
 	}
 
-	o.printJSON("plugin_output", byteToRawMessage(outputBytes))
 	o.print("plugin_time", duration)
 
 	err = json.Unmarshal(outputBytes, &po)
 	if err != nil {
 		o.print("result", "error")
 		o.print("description", "error processing the output of the plugin")
-		o.printArbitrary("error", fmt.Sprintf("%s", err))
+		o.print("error", fmt.Sprintf("%s", err))
 		exitCode = 1
 		return
 	}
+	o.print("plugin_output", po)
 	return
 }
 
-func (o *globalOutput) checkPluginOutput(po pluginOutput, pi *pluginInput) {
-	var action, version string
-
-	err := json.Unmarshal(*(*pi)["action"], &action)
-	check(err, exitCodeInternalError, "checkPluginOutput")
-
-	version = pi.version()
+func (o *jsonObject) checkPluginOutput(po pluginOutput, pi *jsonObject) {
+	version := pi.version()
+	action := (*pi)["action"].(string)
 
 	path, err := schemes.WattsSchemes[version][action].Validate(po)
 	if err != nil {
@@ -304,49 +278,13 @@ func (o *globalOutput) checkPluginOutput(po pluginOutput, pi *pluginInput) {
 	return
 }
 
-func (p pluginInput) String() string {
-	return fmt.Sprintf("%s", p.marshalPluginInput())
+func (o *jsonObject) print(a string, b interface{}) {
+	(*o)[a] = b
 }
 
-func (o *globalOutput) printJSON(a string, b json.RawMessage) {
-	/*
-		if !*machineReadable {
-			bs, err := json.MarshalIndent(&b, outputIndentation, outputTabWidth)
-			if err != nil {
-				fmt.Printf("%15s: %s\n%15s\n\n", a, string(b), fmt.Sprintf("end of %s", a))
-			} else {
-				fmt.Printf("%15s: %s\n%15s\n\n", a, string(bs), fmt.Sprintf("end of %s", a))
-			}
-			return
-		}
-	*/
-	outputMessages = append(outputMessages, b)
-	(*o)[a] = &(outputMessages[len(outputMessages)-1])
-
-}
-
-func (o *globalOutput) print(a string, b string) {
-	m := toRawJSONString(b)
-	outputMessages = append(outputMessages, m)
-	(*o)[a] = &(outputMessages[len(outputMessages)-1])
-}
-
-func (o *globalOutput) printArbitrary(a string, b string) {
-	if !*machineReadable {
-		fmt.Printf("%15s: %s\n", a, b)
-		return
-	}
-
-	m := toRawJSONString(escapeJSONString(b))
-	outputMessages = append(outputMessages, m)
-	(*o)[a] = &(outputMessages[len(outputMessages)-1])
-}
-
-func (o *globalOutput) testOutputAgainst(po pluginOutput, expectedOutput pluginOutputJSON) {
-	bs := marshal(expectedOutput)
-
-	o.printJSON("plugin_output_expected", json.RawMessage(bs))
-	poj := po.(pluginOutputJSON)
+func (o *jsonObject) testOutputAgainst(po pluginOutput, expectedOutput jsonObject) {
+	o.print("plugin_output_expected", expectedOutput)
+	poj := po.(jsonObject)
 	for i, v := range expectedOutput {
 		if o := poj[i]; o != v {
 			app.Errorf("Unexpected output for key %s: '%s' instead of '%s'", i, o, v)
@@ -360,11 +298,11 @@ func (o *globalOutput) testOutputAgainst(po pluginOutput, expectedOutput pluginO
 	return
 }
 
-func (o globalOutput) String() (s string) {
+func (o jsonObject) String() (s string) {
 	if !*machineReadable {
 		var buffer bytes.Buffer
-		for i, v := range o {
-			buffer.WriteString(fmt.Sprintf("%15s: %s\n", i, *v))
+		for i, v := range(o) {
+			buffer.WriteString(fmt.Sprintf("%15s: %s\n", i, string(marshalIndent(v))))
 		}
 		s = buffer.String()
 	} else {
@@ -421,41 +359,25 @@ func escapeJSONString(s string) (e string) {
 	return
 }
 
-func (o *globalOutput) generateConfParams(pluginName string) (confParams json.RawMessage) {
+func (o *jsonObject) generateConfParams(pluginName string) (confParams map[string]interface{}) {
 	po := o.executePlugin(pluginName, &defaultPluginInput)
 	m := po.(map[string]interface{})
 	confParamsInterface := m["conf_params"].([]interface{})
 
-	generatedConfig := map[string](interface{}){}
+	generatedConfig := map[string]interface{}{}
 	for _, v := range confParamsInterface {
 		mm := v.(map[string]interface{})
 		generatedConfig[mm["name"].(string)] = mm["default"].(string)
 	}
-
-	b := marshal(generatedConfig)
-	return byteToRawMessage(b)
-}
-
-func jsonFileToMap(file string) (m pluginOutputJSON) {
-	checkFileExistence(file)
-	overrideBytes, err := ioutil.ReadFile(file)
-	check(err, exitCodeUserError, "")
-	m = jsonStringToMap(string(overrideBytes))
 	return
 }
 
-func jsonStringToMap(jsonString string) (m pluginOutputJSON) {
-	m = pluginOutputJSON{}
-	err := json.Unmarshal([]byte(jsonString), &m)
-	check(err, exitCodeUserError, "on unmarshaling user provided json string")
-	return
-}
 
-func getExpectedOutput() (m pluginOutputJSON) {
+func getExpectedOutput() (m jsonObject) {
 	if *expectedOutputFile != "" {
-		m = jsonFileToMap(*expectedOutputFile)
+		m = jsonFileToObject(*expectedOutputFile)
 	} else if *expectedOutputString != "" {
-		m = jsonStringToMap(*expectedOutputString)
+		m = jsonStringToObject(*expectedOutputString)
 	} else {
 		app.Errorf("No expected output provided")
 		os.Exit(exitCodeUserError)
@@ -487,7 +409,7 @@ func main() {
 	switch kingpin.MustParse(app.Parse(os.Args[1:])) {
 	case pluginCheck.FullCommand():
 		defaultPluginInput.specifyPluginInput()
-		g := globalOutput{}
+		g := jsonObject{}
 		po := g.executePlugin(*pluginName, &defaultPluginInput)
 		g.checkPluginOutput(po, &defaultPluginInput)
 		fmt.Printf("%s", g)
@@ -497,7 +419,7 @@ func main() {
 		eo := getExpectedOutput()
 		defaultPluginInput.specifyPluginInput()
 			
-		g := globalOutput{}
+		g := jsonObject{}
 		po := g.executePlugin(*pluginName, &defaultPluginInput)
 		g.checkPluginOutput(po, &defaultPluginInput)
 		g.testOutputAgainst(po, eo)
@@ -507,8 +429,8 @@ func main() {
 	case generateDefault.FullCommand():
 		*machineReadable = true
 		defaultPluginInput.specifyPluginInput()
-		g := globalOutput{}
-		defaultConfParams = g.generateConfParams(*pluginName)
+		g := jsonObject{}
+		defaultPluginInput["conf_params"] = g.generateConfParams(*pluginName)
 		defaultPluginInput.validate()
 		fmt.Printf("%s", defaultPluginInput)
 
