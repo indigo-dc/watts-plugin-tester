@@ -154,16 +154,18 @@ func (o *jsonObject) print(a string, b interface{}) {
 	(*o)[a] = b
 }
 
-func (o jsonObject) String() (s string) {
+func printGlobalOutput(globalOutput jsonObject) {
+	s := ""
 	if !*machineReadable {
 		var buffer bytes.Buffer
-		for i, v := range o {
+		for i, v := range globalOutput {
 			buffer.WriteString(fmt.Sprintf("%15s: %s\n", i, string(marshalIndent(v))))
 		}
 		s = buffer.String()
 	} else {
-		s = string(marshalIndent(&o))
+		s = string(marshalIndent(globalOutput))
 	}
+	fmt.Printf("%s", s)
 	return
 }
 
@@ -439,7 +441,7 @@ func main() {
 		*machineReadable = true
 		globalOutput = setPluginAction(defaultPluginInput)
 	}
-	fmt.Printf("%s", globalOutput)
+	printGlobalOutput(globalOutput)
 
 	os.Exit(exitCode)
 }
