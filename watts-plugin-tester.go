@@ -44,6 +44,9 @@ var (
 	expectedOutputFile   = pluginTest.Flag("expected-output-file", "Expected output as a file").String()
 	expectedOutputString = pluginTest.Flag("expected-output-string", "Expected output as a string").String()
 
+	pluginTests       = app.Command("tests", "Test a plugin against the inbuilt typed schema and expected output values")
+	pluginTestsConfig = pluginTests.Arg("config", "Config file for the tests to run").Required().String()
+
 	printDefault = app.Command("default", "Print the default plugin input as json")
 
 	printSpecific = app.Command("specific", "Print the plugin input (including the user override) as json")
@@ -270,7 +273,7 @@ func getExpectedOutput() (expectedOutput jsonObject) {
 }
 
 // plugin execution
-func (o *jsonObject) executePlugin(pluginName string, pluginInput jsonObject) (pluginOutput jsonObject) {
+func (o *jsonObject) executePlugin(pluginName string, pluginInput jsonObject) (pluginOutput interface{}) {
 	checkFileExistence(pluginName)
 	inputBase64 := base64.StdEncoding.EncodeToString(marshalPluginInput(pluginInput))
 
@@ -313,11 +316,12 @@ func (o *jsonObject) executePlugin(pluginName string, pluginInput jsonObject) (p
 	return
 }
 
-func (o *jsonObject) checkPluginOutput(pluginOutput jsonObject, pluginInput jsonObject) {
+func (o *jsonObject) checkPluginOutput(pluginOutput interface{}, pluginInput jsonObject) {
 	version := version(pluginInput)
 	action := pluginInput["action"].(string)
 
-	path, err := schemes.WattsSchemes[version][action].Validate(pluginOutput)
+	i := (interface{})(pluginOutput)
+	path, err := schemes.WattsSchemes[version][action].Validate(i)
 	if err != nil {
 		o.print("result", "error")
 		o.print("description", fmt.Sprintf("validation error %s", err))
@@ -331,10 +335,10 @@ func (o *jsonObject) checkPluginOutput(pluginOutput jsonObject, pluginInput json
 	return
 }
 
-func (o *jsonObject) testPluginOutput(pluginOutput jsonObject, expectedOutput jsonObject) {
+func (o *jsonObject) testPluginOutput(pluginOutput interface{}, expectedOutput jsonObject) {
 	o.print("plugin_output_expected", expectedOutput)
 	for i, v := range expectedOutput {
-		if o := pluginOutput[i]; o != v {
+		if o := pluginOutput.(map[string]interface{})[i]; o != v {
 			app.Errorf("Unexpected output for key %s: '%s' instead of '%s'", i, o, v)
 			os.Exit(exitCodePluginError)
 		}
@@ -342,13 +346,12 @@ func (o *jsonObject) testPluginOutput(pluginOutput jsonObject, expectedOutput js
 
 	o.print("result", "ok")
 	o.print("description", "Test passed. All output as expected")
-	fmt.Println(*o)
 	return
 }
 
 func (o *jsonObject) generateConfParams(pluginName string, pluginInput jsonObject) jsonObject {
 	po := o.executePlugin(pluginName, pluginInput)
-	confParamsInterface := po["conf_params"].([]interface{})
+	confParamsInterface := po.(map[string]([]interface{}))["conf_params"]
 
 	confParams := map[string]interface{}{}
 	for _, v := range confParamsInterface {
@@ -357,6 +360,31 @@ func (o *jsonObject) generateConfParams(pluginName string, pluginInput jsonObjec
 	}
 	pluginInput["conf_params"] = confParams
 	return pluginInput
+}
+
+func (o *jsonObject) runTests(config jsonObject) {
+		pluginName := config["exec_file"].(string)
+		tests := config["tests"].([]interface{})
+		testResultList := []jsonObject{}
+		testResult := map[string]int{"total": 0, "passed": 0, "failed": 0,}
+
+		for _, t := range tests {
+			testOutput := jsonObject{}
+			test := t.(map[string]interface{})
+			
+			pi := jsonObject(test["input"].(map[string]interface{}))
+			eo := jsonObject(test["expected_output"].(map[string]interface{}))
+			po := testOutput.executePlugin(pluginName, pi)
+			testOutput.checkPluginOutput(po, pi)
+			testOutput.testPluginOutput(po, eo)
+			testResultList = append(testResultList, testOutput)
+			// TODO handle errors approprietly
+			testResult["total"] = testResult["total"] + 1
+			testResult["passed"] = testResult["passed"] + 1
+		}
+		o.print("test", testResultList)
+		o.print("result", "ok")
+		o.print("results", testResult)
 }
 
 // main
@@ -373,11 +401,14 @@ func main() {
 
 	case pluginTest.FullCommand():
 		eo := getExpectedOutput()
-
 		pi := specifyPluginInput(defaultPluginInput)
 		po := globalOutput.executePlugin(*pluginName, pi)
 		globalOutput.checkPluginOutput(po, pi)
 		globalOutput.testPluginOutput(po, eo)
+
+	case pluginTests.FullCommand():
+		config := jsonFileToObject(*pluginTestsConfig)
+		globalOutput.runTests(config)
 
 	case generateDefault.FullCommand():
 		*machineReadable = true
