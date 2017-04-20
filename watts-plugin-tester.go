@@ -405,26 +405,22 @@ func marshalIndent(i interface{}) (bytes []byte) {
 func main() {
 	app.Author("Lukas Burgey @ KIT within the INDIGO DataCloud Project")
 	app.Version("1.0.0")
+	globalOutput := jsonObject{}
 
 	switch kingpin.MustParse(app.Parse(os.Args[1:])) {
 	case pluginCheck.FullCommand():
 		defaultPluginInput.specifyPluginInput()
-		g := jsonObject{}
-		po := g.executePlugin(*pluginName, &defaultPluginInput)
-		g.checkPluginOutput(po, &defaultPluginInput)
-		fmt.Printf("%s", g)
+		po := globalOutput.executePlugin(*pluginName, &defaultPluginInput)
+		globalOutput.checkPluginOutput(po, &defaultPluginInput)
 
 	case pluginTest.FullCommand():
 		*machineReadable = true
 		eo := getExpectedOutput()
 		defaultPluginInput.specifyPluginInput()
 			
-		g := jsonObject{}
-		po := g.executePlugin(*pluginName, &defaultPluginInput)
-		g.checkPluginOutput(po, &defaultPluginInput)
-		g.testOutputAgainst(po, eo)
-
-		fmt.Printf("%s", g)
+		po := globalOutput.executePlugin(*pluginName, &defaultPluginInput)
+		globalOutput.checkPluginOutput(po, &defaultPluginInput)
+		globalOutput.testOutputAgainst(po, eo)
 
 	case generateDefault.FullCommand():
 		*machineReadable = true
@@ -436,13 +432,14 @@ func main() {
 
 	case printDefault.FullCommand():
 		*machineReadable = true
-		fmt.Printf("%s", defaultPluginInput)
+		globalOutput = defaultPluginInput
 
 	case printSpecific.FullCommand():
 		*machineReadable = true
 		defaultPluginInput.specifyPluginInput()
-		fmt.Printf("%s", defaultPluginInput)
+		globalOutput = defaultPluginInput
 	}
+	fmt.Printf("%s", globalOutput)
 
 	os.Exit(exitCode)
 }
