@@ -87,7 +87,7 @@ func check(err error, exitCode int, msg string) {
 
 func typeAssertMap(i interface{}) (m map[string]interface{}) {
 	m, ok := i.(map[string]interface{})
-	if ! ok {
+	if !ok {
 		app.Errorf("Type Assertion: %s was type %T not %T", i, i, m)
 		os.Exit(exitCodeInternalError)
 	}
@@ -96,7 +96,7 @@ func typeAssertMap(i interface{}) (m map[string]interface{}) {
 
 func typeAssertString(i interface{}) (s string) {
 	s, ok := i.(string)
-	if ! ok {
+	if !ok {
 		app.Errorf("Type Assertion: %s was type %T not %T", i, i, s)
 		os.Exit(exitCodeInternalError)
 	}
@@ -105,7 +105,7 @@ func typeAssertString(i interface{}) (s string) {
 
 func typeAssertList(i interface{}) (l []interface{}) {
 	l, ok := i.([]interface{})
-	if ! ok {
+	if !ok {
 		app.Errorf("Type Assertion: %s was type %T not %T", i, i, l)
 		os.Exit(exitCodeInternalError)
 	}
@@ -394,7 +394,7 @@ func (o *jsonObject) testPluginOutput(pluginOutput interface{}, pluginInput json
 
 func (o *jsonObject) generateConfParams(pluginName string, pluginInput jsonObject) jsonObject {
 	rawOutput := o.executePlugin(pluginName, pluginInput)
-	if ! o.checkPluginOutput(rawOutput, pluginInput) {
+	if !o.checkPluginOutput(rawOutput, pluginInput) {
 		o.terminate(exitCodePluginError)
 	}
 
