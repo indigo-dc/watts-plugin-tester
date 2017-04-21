@@ -452,7 +452,7 @@ func (o *jsonObject) runTests(config jsonObject) bool {
 // main
 func main() {
 	app.Author("Lukas Burgey @ KIT within the INDIGO DataCloud Project")
-	app.Version("3.0.0")
+	app.Version("3.0.1")
 	globalOutput := jsonObject{}
 
 	switch kingpin.MustParse(app.Parse(os.Args[1:])) {
