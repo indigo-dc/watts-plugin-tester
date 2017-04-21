@@ -11,20 +11,26 @@
 # Parameters (passed as environment variables)
 : ${TARGET_PLUGIN_REPO:?"Environment variable unset"}
 
+TESTER_REPO=github.com/indigo-dc/watts-plugin-tester
+TESTER=./watts-plugin-tester
 CONFIG=test/config.json
+plugin=target_plugin
 
 setup_plugin() {
 	echo "==> Obtaining WaTTS plugin from $TARGET_PLUGIN_REPO" >&2
-	if [[ -d plugin/.git ]]
-	then git -C plugin pull $TARGET_PLUGIN_REPO &>/dev/null || exit
-	else git clone $TARGET_PLUGIN_REPO plugin &>/dev/null || exit
+	if [[ -d $plugin/.git ]]
+	then git -C $plugin pull $TARGET_PLUGIN_REPO >&2 || exit
+	else git clone $TARGET_PLUGIN_REPO $plugin >&2 || exit
 	fi
+	pushd $plugin >/dev/null
 }
 
 setup_plugin_tester() {
-	echo '==> Building WaTTS plugin tester' >&2
-	PACKAGE=github.com/indigo-dc/watts-plugin-tester
+	if [[ -f $TESTER ]]
+	then return
+	fi
 
+	echo '==> Building WaTTS plugin tester' >&2
 	if ! which go >/dev/null
 	then
 		echo "go missing, please install go 1.5 or newer" >&2	
@@ -37,18 +43,29 @@ setup_plugin_tester() {
 		echo using local GOPATH $GOPATH >&2
 	fi
 
-	go get $PACKAGE || exit
-	go build -o watts-plugin-tester $PACKAGE || exit
+	go get $TESTER_REPO >&2 || exit
+	go build -o $TESTER $TESTER_REPO >&2 || exit
 }
 
 run_tests() {
-	echo '==> Starting tests' >&2
-	cd plugin
-	watts-plugin-tester -m tests $CONFIG
+	echo '==> Starting WaTTS plugin tester' >&2
+	./watts-plugin-tester -m tests $CONFIG
 }
 
 
+clean_up() {
+	echo
+	echo '==> Cleaning up remaining files' >&2
 
-setup_plugin_tester || exit
+	popd >/dev/null
+
+	if [[ -d $plugin ]]
+	then rm -rf $plugin
+	fi
+}
+
+trap 'clean_up' EXIT
+
 setup_plugin || exit
+setup_plugin_tester || exit
 run_tests || exit
