@@ -361,6 +361,7 @@ func (o *jsonObject) checkPluginOutput(pluginOutput interface{}, pluginInput jso
 	if err != nil {
 		o.print("result", "error")
 		o.print("description", fmt.Sprintf("Validation error %s at %s", err, path))
+		o.print("validation_error", map[string]interface{}{"error": fmt.Sprint(err), "path": path})
 		return false
 	}
 
