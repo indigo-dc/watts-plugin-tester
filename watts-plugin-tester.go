@@ -378,11 +378,27 @@ func (o *jsonObject) testPluginOutput(pluginOutput interface{}, pluginInput json
 	plugin := (*o)["plugin"].(jsonObject)
 	plugin.print("output_expected", expectedOutput)
 
-	for i, v := range expectedOutput {
-		if po := typeAssertMap(pluginOutput)[i]; po != v {
+	po := typeAssertMap(pluginOutput)
+	for i, expectedValue := range expectedOutput {
+		realValue := po[i]
+		equals := false
+
+		switch expectedValue.(type) {
+		case []interface{}:
+			switch realValue.(type) {
+			case []interface{}:
+				equals = true
+			default:
+				equals = false
+			}
+		default:
+			equals = realValue == expectedValue
+		}
+
+		if !equals {
 			o.print("result", "error")
 			o.print("description", fmt.Sprintf(
-				"Unexpected output for key %s: '%s' instead of '%s'", i, po, v))
+				"Unexpected output for key %s: '%s' instead of '%s'", i, realValue, expectedOutput))
 			return false
 		}
 	}
@@ -452,7 +468,7 @@ func (o *jsonObject) runTests(config jsonObject) bool {
 // main
 func main() {
 	app.Author("Lukas Burgey @ KIT within the INDIGO DataCloud Project")
-	app.Version("3.0.1")
+	app.Version("3.0.2")
 	globalOutput := jsonObject{}
 
 	switch kingpin.MustParse(app.Parse(os.Args[1:])) {
