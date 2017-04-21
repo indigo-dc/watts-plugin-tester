@@ -57,7 +57,7 @@ clean_up() {
 	echo
 	echo '==> Cleaning up remaining files' >&2
 
-	popd >/dev/null
+	popd &>/dev/null
 
 	if [[ -d $plugin ]]
 	then rm -rf $plugin
