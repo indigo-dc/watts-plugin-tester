@@ -85,6 +85,33 @@ func check(err error, exitCode int, msg string) {
 	return
 }
 
+func typeAssertMap(i interface{}) (m map[string]interface{}) {
+	m, ok := i.(map[string]interface{})
+	if ! ok {
+		app.Errorf("Type Assertion: %s was type %T not %T", i, i, m)
+		os.Exit(exitCodeInternalError)
+	}
+	return
+}
+
+func typeAssertString(i interface{}) (s string) {
+	s, ok := i.(string)
+	if ! ok {
+		app.Errorf("Type Assertion: %s was type %T not %T", i, i, s)
+		os.Exit(exitCodeInternalError)
+	}
+	return
+}
+
+func typeAssertList(i interface{}) (l []interface{}) {
+	l, ok := i.([]interface{})
+	if ! ok {
+		app.Errorf("Type Assertion: %s was type %T not %T", i, i, l)
+		os.Exit(exitCodeInternalError)
+	}
+	return
+}
+
 func checkFileExistence(name string) {
 	_, err := os.Stat(name)
 	check(err, exitCodeUserError, "")
@@ -351,7 +378,7 @@ func (o *jsonObject) testPluginOutput(pluginOutput interface{}, pluginInput json
 	plugin.print("output_expected", expectedOutput)
 
 	for i, v := range expectedOutput {
-		if po := pluginOutput.(map[string]interface{})[i]; po != v {
+		if po := typeAssertMap(pluginOutput)[i]; po != v {
 			o.print("result", "error")
 			o.print("description", fmt.Sprintf(
 				"Unexpected output for key %s: '%s' instead of '%s'", i, po, v))
@@ -365,35 +392,39 @@ func (o *jsonObject) testPluginOutput(pluginOutput interface{}, pluginInput json
 }
 
 func (o *jsonObject) generateConfParams(pluginName string, pluginInput jsonObject) jsonObject {
-	pluginOutput := o.executePlugin(pluginName, pluginInput)
-	confParamsList := pluginOutput.(map[string]interface{})["conf_params"].([]interface{})
+	rawOutput := o.executePlugin(pluginName, pluginInput)
+	if ! o.checkPluginOutput(rawOutput, pluginInput) {
+		o.terminate(exitCodePluginError)
+	}
+
+	pluginOutput := typeAssertMap(rawOutput)
+	confParamsList := typeAssertList(pluginOutput["conf_params"])
 
 	confParams := jsonObject{}
 	for _, v := range confParamsList {
-		mm := v.(map[string]interface{})
-		confParams[mm["name"].(string)] = mm["default"].(string)
+		m := typeAssertMap(v)
+		confParams[typeAssertString(m["name"])] = m["default"]
 	}
 	pluginInput["conf_params"] = confParams
 	return pluginInput
 }
 
 func (o *jsonObject) runTests(config jsonObject) bool {
-	pluginName := config["exec_file"].(string)
-	tests := config["tests"].([]interface{ })
+	pluginName := typeAssertString(config["exec_file"])
+	tests := typeAssertList(config["tests"])
 	testLists := map[string][]jsonObject{}
 	testPassedList := []jsonObject{}
 	testFailedList := []jsonObject{}
 	testResult := map[string]int{"total": 0, "passed": 0, "failed": 0}
 
-
 	for _, t := range tests {
 		testResult["total"]++
 
 		testOutput := jsonObject{}
-		test := t.(map[string]interface{})
-		pi := jsonObject(test["input"].(map[string]interface{}))
+		test := typeAssertMap(t)
+		pi := jsonObject(typeAssertMap(test["input"]))
 		spi := specifyPluginInput(pi)
-		eo := jsonObject(test["expected_output"].(map[string]interface{}))
+		eo := jsonObject(typeAssertMap(test["expected_output"]))
 		po := testOutput.executePlugin(pluginName, pi)
 
 		if testOutput.testPluginOutput(po, spi, eo) {
