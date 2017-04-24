@@ -136,21 +136,30 @@ func merge(dest *jsonObject, src *jsonObject) {
 	return
 }
 
-func marshal(i interface{}) (bytes []byte) {
-	bytes, err := json.Marshal(i)
+func marshal(i interface{}) (bs[]byte) {
+	b := new(bytes.Buffer)
+	encoder := json.NewEncoder(b)
+	encoder.SetEscapeHTML(false)
+	err := encoder.Encode(i)
 	check(err, exitCodeInternalError, "marshal")
+	bs = b.Bytes()
 	return
 }
 
-func marshalIndent(i interface{}) (bytes []byte) {
+func marshalIndent(i interface{}) (bs []byte) {
 	indentation := ""
 	if !*machineReadable {
 		indentation = outputIndentation
 	}
 
-	bytes, err := json.MarshalIndent(i, indentation, outputTabWidth)
+	b := new(bytes.Buffer)
+	encoder := json.NewEncoder(b)
+	encoder.SetEscapeHTML(false)
+	encoder.SetIndent(indentation, outputTabWidth)
+	err := encoder.Encode(i)
 	check(err, exitCodeInternalError, "marshalIndent")
-	return bytes
+	bs = b.Bytes()
+	return
 }
 
 func (o *jsonObject) print(a string, b interface{}) {
@@ -429,7 +438,6 @@ func (o *jsonObject) generateConfParams(pluginName string, pluginInput jsonObjec
 func (o *jsonObject) runTests(config jsonObject) bool {
 	pluginName := typeAssertString(config["exec_file"])
 	tests := typeAssertList(config["tests"])
-	testLists := map[string][]jsonObject{}
 	testPassedList := []jsonObject{}
 	testFailedList := []jsonObject{}
 	testResult := map[string]int{"total": 0, "passed": 0, "failed": 0}
@@ -452,23 +460,23 @@ func (o *jsonObject) runTests(config jsonObject) bool {
 			testFailedList = append(testFailedList, testOutput)
 		}
 	}
-	testLists["passed"] = testPassedList
-	testLists["failed"] = testFailedList
-	o.print("tests", testLists)
+	o.print("tests", map[string][]jsonObject{
+		"passed": testPassedList,
+		"failed": testFailedList,
+	})
 	o.print("result", "ok")
 	o.print("stats", testResult)
 
 	if testResult["failed"] > 0 {
 		return false
-	} else {
-		return true
 	}
+	return true
 }
 
 // main
 func main() {
 	app.Author("Lukas Burgey @ KIT within the INDIGO DataCloud Project")
-	app.Version("3.0.2")
+	app.Version("3.0.3")
 	globalOutput := jsonObject{}
 
 	switch kingpin.MustParse(app.Parse(os.Args[1:])) {
