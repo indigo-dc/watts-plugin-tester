@@ -130,7 +130,7 @@ func jsonStringToObject(jsonString string) (m jsonObject) {
 	return
 }
 
-func marshal(i interface{}) (bs[]byte) {
+func marshal(i interface{}) (bs []byte) {
 	b := new(bytes.Buffer)
 	encoder := json.NewEncoder(b)
 	encoder.SetEscapeHTML(false)
@@ -192,7 +192,7 @@ func validatePluginAction(action string) {
 func generateUserID(pluginInput jsonObject) jsonObject {
 	userInfo := typeAssertMap(pluginInput["user_info"])
 	j := marshal(jsonObject{
-		"issuer": userInfo["iss"],
+		"issuer":  userInfo["iss"],
 		"subject": userInfo["sub"],
 	})
 
@@ -225,7 +225,7 @@ func pluginInputFromConf(file string, identifier string) jsonObject {
 			check(err, exitCodeUserError, "")
 
 			regex := fmt.Sprintf("service.%s.plugin.(?P<key>.+) = (?P<value>.+)\n",
-			*inputComplementConfID)
+				*inputComplementConfID)
 			configExtractor, err := regexp.Compile(regex)
 			check(err, exitCodeInternalError, "")
 
@@ -240,7 +240,7 @@ func pluginInputFromConf(file string, identifier string) jsonObject {
 			}
 
 			app.Errorf("Could not find configuration parameters for '%s' in '%s'",
-			*inputComplementConfID, *inputComplementConf)
+				*inputComplementConfID, *inputComplementConf)
 			os.Exit(exitCodeUserError)
 		} else {
 			app.Errorf("Need a config identifier for config override")
@@ -250,18 +250,13 @@ func pluginInputFromConf(file string, identifier string) jsonObject {
 	return jsonObject{}
 }
 
-func specifyPluginInput(pluginInput jsonObject) (specificPluginInput jsonObject) {
-	specificPluginInput = defaultPluginInput
+func specifyPluginInput(pluginInput jsonObject) jsonObject {
+	specificPluginInput := defaultPluginInput
 
 	// merge a user provided watts config
 	err := mergo.MergeWithOverwrite(&specificPluginInput,
-					pluginInputFromConf(*inputComplementFile, *inputComplementConfID))
+		pluginInputFromConf(*inputComplementFile, *inputComplementConfID))
 	check(err, exitCodeInternalError, "merging plugin input from conf")
-
-	
-	// merge the given base input
-	err = mergo.MergeWithOverwrite(&specificPluginInput, pluginInput)
-	check(err, exitCodeInternalError, "merging plugin input")
 
 	// merge a user provided json file
 	if *inputComplementFile != "" {
@@ -275,10 +270,14 @@ func specifyPluginInput(pluginInput jsonObject) (specificPluginInput jsonObject)
 		check(err, exitCodeInternalError, "merging plugin input from complement string")
 	}
 
-	specificPluginInput = setPluginAction(specificPluginInput)
-	specificPluginInput = generateUserID(specificPluginInput)
-	validate(specificPluginInput)
-	return
+	// merge the given base input
+	err = mergo.Merge(&pluginInput, specificPluginInput)
+	check(err, exitCodeInternalError, "merging plugin input")
+
+	specificPluginInput = setPluginAction(pluginInput)
+	specificPluginInput = generateUserID(pluginInput)
+	validate(pluginInput)
+	return pluginInput
 }
 
 func version(pluginInput jsonObject) (version string) {
@@ -483,14 +482,14 @@ func main() {
 
 	switch kingpin.MustParse(app.Parse(os.Args[1:])) {
 	case pluginCheck.FullCommand():
-		pi := specifyPluginInput(defaultPluginInput)
+		pi := specifyPluginInput(jsonObject{})
 		po := globalOutput.executePlugin(*pluginName, pi)
 		if !globalOutput.checkPluginOutput(po, pi) {
 			exitCode = exitCodePluginError
 		}
 
 	case pluginTest.FullCommand():
-		pi := specifyPluginInput(defaultPluginInput)
+		pi := specifyPluginInput(jsonObject{})
 		po := globalOutput.executePlugin(*pluginName, pi)
 		eo := getExpectedOutput()
 		if !globalOutput.testPluginOutput(po, pi, eo) {
@@ -516,7 +515,7 @@ func main() {
 
 	case printSpecific.FullCommand():
 		*machineReadable = true
-		globalOutput = specifyPluginInput(defaultPluginInput)
+		globalOutput = specifyPluginInput(jsonObject{})
 	}
 
 	printGlobalOutput(globalOutput)
