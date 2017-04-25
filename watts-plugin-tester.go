@@ -452,7 +452,7 @@ func (o *jsonObject) runTests(config jsonObject) bool {
 		pi := jsonObject(typeAssertMap(test["input"]))
 		spi := specifyPluginInput(pi)
 		eo := jsonObject(typeAssertMap(test["expected_output"]))
-		po := testOutput.executePlugin(pluginName, pi)
+		po := testOutput.executePlugin(pluginName, spi)
 
 		if testOutput.testPluginOutput(po, spi, eo) {
 			testResult["passed"]++
@@ -478,7 +478,7 @@ func (o *jsonObject) runTests(config jsonObject) bool {
 // main
 func main() {
 	app.Author("Lukas Burgey @ KIT within the INDIGO DataCloud Project")
-	app.Version("3.0.3")
+	app.Version("3.0.4")
 	globalOutput := jsonObject{}
 
 	switch kingpin.MustParse(app.Parse(os.Args[1:])) {
