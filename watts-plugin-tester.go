@@ -130,12 +130,6 @@ func jsonStringToObject(jsonString string) (m jsonObject) {
 	return
 }
 
-func merge(dest *jsonObject, src *jsonObject) {
-	err := mergo.Merge(dest, src)
-	check(err, exitCodeInternalError, "merging plugin inputs")
-	return
-}
-
 func marshal(i interface{}) (bs[]byte) {
 	b := new(bytes.Buffer)
 	encoder := json.NewEncoder(b)
@@ -196,13 +190,11 @@ func validatePluginAction(action string) {
 }
 
 func generateUserID(pluginInput jsonObject) jsonObject {
-	userIDJSONReduced := map[string]interface{}{}
-
-	userInfo := pluginInput["user_info"].(map[string]interface{})
-	userIDJSONReduced["issuer"] = userInfo["iss"]
-	userIDJSONReduced["subject"] = userInfo["sub"]
-
-	j := marshal(userIDJSONReduced)
+	userInfo := typeAssertMap(pluginInput["user_info"])
+	j := marshal(jsonObject{
+		"issuer": userInfo["iss"],
+		"subject": userInfo["sub"],
+	})
 
 	escaped := bytes.Replace(j, []byte{'/'}, []byte{'\\', '/'}, -1)
 	pluginInput["watts_userid"] = base64url.Encode(escaped)
@@ -225,18 +217,15 @@ func marshalPluginInput(pluginInput jsonObject) (s []byte) {
 	return
 }
 
-func specifyPluginInput(pluginInput jsonObject) (specificPluginInput jsonObject) {
-	specificPluginInput = pluginInput
-
-	// merge a user provided watts config
-	if *inputComplementConf != "" {
+func pluginInputFromConf(file string, identifier string) jsonObject {
+	if file != "" {
 		checkFileExistence(*inputComplementConf)
 		if *inputComplementConfID != "" {
 			fileContent, err := ioutil.ReadFile(*inputComplementConf)
 			check(err, exitCodeUserError, "")
 
 			regex := fmt.Sprintf("service.%s.plugin.(?P<key>.+) = (?P<value>.+)\n",
-				*inputComplementConfID)
+			*inputComplementConfID)
 			configExtractor, err := regexp.Compile(regex)
 			check(err, exitCodeInternalError, "")
 
@@ -247,34 +236,47 @@ func specifyPluginInput(pluginInput jsonObject) (specificPluginInput jsonObject)
 				for i := 1; i < len(matches); i++ {
 					confParams[string(matches[i][1])] = string(matches[i][2])
 				}
-				specificPluginInput["conf_params"] = confParams
-			} else {
-				app.Errorf("Could not find configuration parameters for '%s' in '%s'",
-					*inputComplementConfID, *inputComplementConf)
-				os.Exit(exitCodeUserError)
+				return jsonObject{"conf_params": confParams}
 			}
+
+			app.Errorf("Could not find configuration parameters for '%s' in '%s'",
+			*inputComplementConfID, *inputComplementConf)
+			os.Exit(exitCodeUserError)
 		} else {
 			app.Errorf("Need a config identifier for config override")
 			os.Exit(exitCodeUserError)
 		}
 	}
+	return jsonObject{}
+}
+
+func specifyPluginInput(pluginInput jsonObject) (specificPluginInput jsonObject) {
+	specificPluginInput = defaultPluginInput
+
+	// merge a user provided watts config
+	err := mergo.MergeWithOverwrite(&specificPluginInput,
+					pluginInputFromConf(*inputComplementFile, *inputComplementConfID))
+	check(err, exitCodeInternalError, "merging plugin input from conf")
+
+	
+	// merge the given base input
+	err = mergo.MergeWithOverwrite(&specificPluginInput, pluginInput)
+	check(err, exitCodeInternalError, "merging plugin input")
 
 	// merge a user provided json file
 	if *inputComplementFile != "" {
-		overridePluginInput := jsonFileToObject(*inputComplementFile)
-		merge(&overridePluginInput, &specificPluginInput)
-		specificPluginInput = overridePluginInput
+		err = mergo.MergeWithOverwrite(&specificPluginInput, jsonFileToObject(*inputComplementFile))
+		check(err, exitCodeInternalError, "merging plugin input from complement file")
 	}
 
 	// merge a user provided json string
 	if *inputComplementString != "" {
-		overridePluginInput := jsonStringToObject(*inputComplementString)
-		merge(&overridePluginInput, &specificPluginInput)
-		specificPluginInput = overridePluginInput
+		err = mergo.MergeWithOverwrite(&specificPluginInput, jsonStringToObject(*inputComplementString))
+		check(err, exitCodeInternalError, "merging plugin input from complement string")
 	}
 
-	specificPluginInput = generateUserID(specificPluginInput)
 	specificPluginInput = setPluginAction(specificPluginInput)
+	specificPluginInput = generateUserID(specificPluginInput)
 	validate(specificPluginInput)
 	return
 }
