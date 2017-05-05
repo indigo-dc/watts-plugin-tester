@@ -217,36 +217,29 @@ func marshalPluginInput(pluginInput jsonObject) (s []byte) {
 	return
 }
 
-func pluginInputFromConf(file string, identifier string) jsonObject {
-	if file != "" {
-		checkFileExistence(*inputComplementConf)
-		if *inputComplementConfID != "" {
-			fileContent, err := ioutil.ReadFile(*inputComplementConf)
-			check(err, exitCodeUserError, "")
+func pluginInputFromConf() jsonObject {
+	checkFileExistence(*inputComplementConf)
+	fileContent, err := ioutil.ReadFile(*inputComplementConf)
+	check(err, exitCodeUserError, "")
 
-			regex := fmt.Sprintf("service.%s.plugin.(?P<key>.+) = (?P<value>.+)\n",
-				*inputComplementConfID)
-			configExtractor, err := regexp.Compile(regex)
-			check(err, exitCodeInternalError, "")
+	regex := fmt.Sprintf("service.%s.plugin.(?P<key>.+) = (?P<value>.+)\n",
+	*inputComplementConfID)
+	configExtractor, err := regexp.Compile(regex)
+	check(err, exitCodeInternalError, "")
 
-			matches := configExtractor.FindAllSubmatch(fileContent, 10)
+	matches := configExtractor.FindAllSubmatch(fileContent, 10)
 
-			if len(matches) > 0 {
-				confParams := map[string]string{}
-				for i := 1; i < len(matches); i++ {
-					confParams[string(matches[i][1])] = string(matches[i][2])
-				}
-				return jsonObject{"conf_params": confParams}
-			}
-
-			app.Errorf("Could not find configuration parameters for '%s' in '%s'",
-				*inputComplementConfID, *inputComplementConf)
-			os.Exit(exitCodeUserError)
-		} else {
-			app.Errorf("Need a config identifier for config override")
-			os.Exit(exitCodeUserError)
+	if len(matches) > 0 {
+		confParams := map[string]string{}
+		for i := 1; i < len(matches); i++ {
+			confParams[string(matches[i][1])] = string(matches[i][2])
 		}
+		return jsonObject{"conf_params": confParams}
 	}
+
+	app.Errorf("Could not find configuration parameters for '%s' in '%s'",
+	*inputComplementConfID, *inputComplementConf)
+	os.Exit(exitCodeUserError)
 	return jsonObject{}
 }
 
@@ -254,24 +247,31 @@ func specifyPluginInput(pluginInput jsonObject) jsonObject {
 	specificPluginInput := defaultPluginInput
 
 	// merge a user provided watts config
-	err := mergo.MergeWithOverwrite(&specificPluginInput,
-		pluginInputFromConf(*inputComplementFile, *inputComplementConfID))
-	check(err, exitCodeInternalError, "merging plugin input from conf")
+	if *inputComplementConf != "" {
+		if *inputComplementConfID != "" {
+			err := mergo.MergeWithOverwrite(&specificPluginInput,
+			pluginInputFromConf())
+			check(err, exitCodeInternalError, "merging plugin input from conf")
+		} else {
+			app.Errorf("Need a config identifier for config override")
+			os.Exit(exitCodeUserError)
+		}
+	}
 
 	// merge a user provided json file
 	if *inputComplementFile != "" {
-		err = mergo.MergeWithOverwrite(&specificPluginInput, jsonFileToObject(*inputComplementFile))
+		err := mergo.MergeWithOverwrite(&specificPluginInput, jsonFileToObject(*inputComplementFile))
 		check(err, exitCodeInternalError, "merging plugin input from complement file")
 	}
 
 	// merge a user provided json string
 	if *inputComplementString != "" {
-		err = mergo.MergeWithOverwrite(&specificPluginInput, jsonStringToObject(*inputComplementString))
+		err := mergo.MergeWithOverwrite(&specificPluginInput, jsonStringToObject(*inputComplementString))
 		check(err, exitCodeInternalError, "merging plugin input from complement string")
 	}
 
 	// merge the given base input
-	err = mergo.Merge(&pluginInput, specificPluginInput)
+	err := mergo.Merge(&pluginInput, specificPluginInput)
 	check(err, exitCodeInternalError, "merging plugin input")
 
 	specificPluginInput = setPluginAction(pluginInput)
