@@ -29,9 +29,9 @@ features
 	
 - validate the plugin input
 - validate the plugin output
-	- "check": check that the json conforms to the api of watts
-	- "test": do "check" and also compare the output a given with expected output
-	- "tests": do multiple "test"s using a configuration file. Set test/ for an example
+	- `check`: check that the json is conforming with the api of watts
+	- `test`: do `check` and also compare the output with a provided expected output
+	- `tests`: do multiple `test`s using a configuration file. See `test/` for an example
 	
 - generate a default json from the output of the plugins parameter action
 - generate a default json with valid encoded fields, e.g. the watts_userid
