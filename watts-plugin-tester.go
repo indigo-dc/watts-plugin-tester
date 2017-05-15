@@ -332,22 +332,14 @@ func (o *jsonObject) executePlugin(pluginName string, pluginInput jsonObject) (p
 	}
 
 	timeBeforeExec := time.Now()
-	outputBytes, err := cmd.CombinedOutput()
+	// command execution
+	outputBytes, cmdErr := cmd.CombinedOutput()
 	timeAfterExec := time.Now()
 	duration := fmt.Sprintf("%s", timeAfterExec.Sub(timeBeforeExec))
 	plugin.print("duration", duration)
 
-	if err != nil {
-		plugin.print("result", "error")
-		plugin.print("error", fmt.Sprint(err))
-		plugin.print("description", "error executing the plugin")
-
-		plugin.print("output", outputBytes)
-		o.print("plugin", plugin)
-		o.terminate(exitCodePluginExecutionError)
-	}
-
-	err = json.Unmarshal(outputBytes, &pluginOutput)
+	// we ignore the cmdErr and see if we still can unmarshall the output
+	err := json.Unmarshal(outputBytes, &pluginOutput)
 	if err != nil {
 		plugin.print("result", "error")
 		plugin.print("error", fmt.Sprint(err))
@@ -356,9 +348,19 @@ func (o *jsonObject) executePlugin(pluginName string, pluginInput jsonObject) (p
 		plugin.print("output", outputBytes)
 		o.print("plugin", plugin)
 		o.terminate(exitCodeInternalError)
+	} else {
+		plugin.print("output", pluginOutput)
 	}
 
-	plugin.print("output", pluginOutput)
+	// check of command error
+	if cmdErr != nil {
+		plugin.print("result", "error")
+		plugin.print("error", fmt.Sprint(err))
+		plugin.print("description", "error executing the plugin")
+		o.print("plugin", plugin)
+		o.terminate(exitCodePluginExecutionError)
+	}
+
 	o.print("plugin", plugin)
 	return
 }
@@ -477,7 +479,7 @@ func (o *jsonObject) runTests(config jsonObject) bool {
 // main
 func main() {
 	app.Author("Lukas Burgey @ KIT within the INDIGO DataCloud Project")
-	app.Version("3.0.5")
+	app.Version("3.0.6")
 	globalOutput := jsonObject{}
 
 	switch kingpin.MustParse(app.Parse(os.Args[1:])) {
