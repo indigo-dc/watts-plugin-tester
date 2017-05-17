@@ -316,7 +316,7 @@ func (o *jsonObject) terminate(exitCode int) {
 
 // plugin execution
 func (o *jsonObject) executePlugin(pluginName string, pluginInput jsonObject) (pluginOutput interface{}) {
-	checkFileExistence(pluginName)
+	var err error
 	inputBase64 := base64.StdEncoding.EncodeToString(marshalPluginInput(pluginInput))
 
 	plugin := jsonObject{}
@@ -339,24 +339,26 @@ func (o *jsonObject) executePlugin(pluginName string, pluginInput jsonObject) (p
 	plugin.print("duration", duration)
 
 	// we ignore the cmdErr and see if we still can unmarshall the output
-	err := json.Unmarshal(outputBytes, &pluginOutput)
-	if err != nil {
-		plugin.print("result", "error")
-		plugin.print("error", fmt.Sprint(err))
-		plugin.print("description", "Error processing the output of the plugin")
+	if outputBytes != nil {
+		err = json.Unmarshal(outputBytes, &pluginOutput)
+		if err != nil {
+			plugin.print("result", "error")
+			plugin.print("error", fmt.Sprint(err))
+			plugin.print("description", "Error processing the output of the plugin")
 
-		plugin.print("output", outputBytes)
-		o.print("plugin", plugin)
-		o.terminate(exitCodeInternalError)
-	} else {
-		plugin.print("output", pluginOutput)
+			plugin.print("output", outputBytes)
+			o.print("plugin", plugin)
+			o.terminate(exitCodeInternalError)
+		} else {
+			plugin.print("output", pluginOutput)
+		}
 	}
 
 	// check of command error
 	if cmdErr != nil {
 		plugin.print("result", "error")
-		plugin.print("error", fmt.Sprint(err))
-		plugin.print("description", "error executing the plugin")
+		plugin.print("error", fmt.Sprint(cmdErr))
+		plugin.print("description", "Error executing the plugin")
 		o.print("plugin", plugin)
 		o.terminate(exitCodePluginExecutionError)
 	}
