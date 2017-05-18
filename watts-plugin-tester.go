@@ -281,19 +281,17 @@ func specifyPluginInput(pluginInput jsonObject) jsonObject {
 }
 
 func version(pluginInput jsonObject) (version string) {
-	versionJSON := pluginInput["watts_version"]
-	versionBytes, err := json.Marshal(&versionJSON)
-	check(err, exitCodeInternalError, "")
+	version = typeAssertString(pluginInput["watts_version"])
 
 	versionExtractor, _ := regexp.Compile("[^\"+v]+")
-	extractedVersion := versionExtractor.Find(versionBytes)
+	extractedVersion := versionExtractor.FindString(version)
 
-	if _, versionFound := schemes.WattsSchemes[string(extractedVersion)]; !versionFound {
-		extractedVersion = versionExtractor.Find(pluginInput["watts_version"].([]byte))
-		pluginInput["watts_version"] = defaultWattsVersion
+	if _, versionFound := schemes.WattsSchemes[extractedVersion]; !versionFound {
+		extractedVersion = defaultWattsVersion
 	}
 
-	version = string(extractedVersion)
+	version = extractedVersion
+	pluginInput["watts_version"] = version
 	return
 }
 
@@ -481,7 +479,7 @@ func (o *jsonObject) runTests(config jsonObject) bool {
 // main
 func main() {
 	app.Author("Lukas Burgey @ KIT within the INDIGO DataCloud Project")
-	app.Version("3.0.7")
+	app.Version("3.0.8")
 	globalOutput := jsonObject{}
 
 	switch kingpin.MustParse(app.Parse(os.Args[1:])) {
