@@ -181,15 +181,19 @@ func writeCredentialsToFiles(pluginOutput interface{}) {
 	// TODO dirty
 	// type assertions fail silently here!
 	if outputMap, ok := pluginOutput.(map[string]interface{}); ok {
-		if credential, ok := outputMap["credential"]; ok {
-			credentialList := credential.([]interface{})
-			for _, v := range credentialList {
-				if vm, ok := v.(map[string]interface{}); ok {
-					// TODO currently we ignore the type field here
-					name := vm["name"].(string)
-					value := vm["value"].(string)
+		if c, ok := outputMap["credential"]; ok {
+			cl := c.([]interface{})
+			for _, v := range cl {
+				if cred, ok := v.(map[string]interface{}); ok {
+					name := cred["name"].(string)
+					value := cred["value"].(string)
 
-					// TODO this seems to override silently (which is okay)
+					// override with save_as filename if it exists
+					if fileName, ok := cred["save_as"]; ok {
+						name = fileName.(string)
+					}
+
+					// this seems to override silently (which is okay)
 					fileHandle, err := os.Create(name)
 					defer fileHandle.Close()
 					check(err, 1, "creating credential "+name)
