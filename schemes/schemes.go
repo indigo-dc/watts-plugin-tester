@@ -34,15 +34,24 @@ var (
 		v.ObjKV("type", v.String()),
 		v.ObjKV("mandatory", v.Boolean()),
 	)
-	PluginInputScheme = v.Object(
-		v.ObjKV("watts_version", v.String()),
-		v.ObjKV("watts_userid", v.String()),
-		v.ObjKV("cred_state", v.String()),
-		v.ObjKV("access_token", schemeAccessToken),
-		v.ObjKV("additional_logins", schemeAdditionalLogins),
-		v.ObjKV("conf_params", schemeParams),
-		v.ObjKV("params", schemeParams),
-		v.ObjKV("user_info", schemeUserInfo),
+
+	// TODO dirty 
+	// we circumvent some "bugs"/quirks in the watts api here by differentiating between actions
+	PluginInputScheme = v.Or(
+		v.Object(
+			v.ObjKV("action", v.String(v.StrIs("parameter"))),
+		),
+		v.Object(
+			v.ObjKV("action", v.String()),
+			v.ObjKV("watts_version", v.String()),
+			v.ObjKV("watts_userid", v.String()),
+			v.ObjKV("cred_state", v.String()),
+			v.ObjKV("access_token", schemeAccessToken),
+			v.ObjKV("additional_logins", schemeAdditionalLogins),
+			v.ObjKV("conf_params", schemeParams),
+			v.ObjKV("params", schemeParams),
+			v.ObjKV("user_info", schemeUserInfo),
+		),
 	)
 	schemeRequestResultValue = v.Object(v.ObjKV("result", v.Or(
 		v.String(v.StrIs("error")),

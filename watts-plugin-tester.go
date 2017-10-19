@@ -34,6 +34,8 @@ var (
 	inputComplementConf   = app.Flag("input-config", "Complement the plugin input with the config parameters from a watts config").Short('c').String()
 	inputComplementConfID = app.Flag("input-config-identifier", "Service ID for the watts config").Short('i').String()
 
+	writeCredentials = app.Flag("write", "Write the yielded credentials into files").Short('w').Bool()
+
 	machineReadable        = app.Flag("machine", "Be machine readable (all output will be json)").Short('m').Bool()
 	useEnvForParameterPass = app.Flag("env", "Use this environment variable to pass the plugin input to the plugin").Short('e').Bool()
 	envVarForParameterPass = app.Flag("env-var", "This environment variable is used to pass the plugin input to the plugin").Default("WATTS_PARAMETER").String()
@@ -175,6 +177,34 @@ func printGlobalOutput(globalOutput jsonObject) {
 	return
 }
 
+func writeCredentialsToFiles(pluginOutput interface{}) {
+	// TODO dirty
+	// type assertions fail silently here!
+	if outputMap, ok := pluginOutput.(map[string]interface{}); ok {
+		if c, ok := outputMap["credential"]; ok {
+			cl := c.([]interface{})
+			for _, v := range cl {
+				if cred, ok := v.(map[string]interface{}); ok {
+					name := cred["name"].(string)
+					value := cred["value"].(string)
+
+					// override with save_as filename if it exists
+					if fileName, ok := cred["save_as"]; ok {
+						name = fileName.(string)
+					}
+
+					// this seems to override silently (which is okay)
+					fileHandle, err := os.Create(name)
+					defer fileHandle.Close()
+					check(err, 1, "creating credential "+name)
+					_, err = fileHandle.WriteString(value)
+					check(err, 1, "writing credential "+name)
+				}
+			}
+		}
+	}
+}
+
 // pluginInput processing
 func validate(pluginInput jsonObject) {
 	path, err := schemes.PluginInputScheme.Validate(pluginInput)
@@ -223,7 +253,7 @@ func pluginInputFromConf() jsonObject {
 	check(err, exitCodeUserError, "")
 
 	regex := fmt.Sprintf("service.%s.plugin.(?P<key>.+) = (?P<value>.+)\n",
-	*inputComplementConfID)
+		*inputComplementConfID)
 	configExtractor, err := regexp.Compile(regex)
 	check(err, exitCodeInternalError, "")
 
@@ -238,7 +268,7 @@ func pluginInputFromConf() jsonObject {
 	}
 
 	app.Errorf("Could not find configuration parameters for '%s' in '%s'",
-	*inputComplementConfID, *inputComplementConf)
+		*inputComplementConfID, *inputComplementConf)
 	os.Exit(exitCodeUserError)
 	return jsonObject{}
 }
@@ -250,7 +280,7 @@ func specifyPluginInput(pluginInput jsonObject) jsonObject {
 	if *inputComplementConf != "" {
 		if *inputComplementConfID != "" {
 			err := mergo.MergeWithOverwrite(&specificPluginInput,
-			pluginInputFromConf())
+				pluginInputFromConf())
 			check(err, exitCodeInternalError, "merging plugin input from conf")
 		} else {
 			app.Errorf("Need a config identifier for config override")
@@ -349,6 +379,10 @@ func (o *jsonObject) executePlugin(pluginName string, pluginInput jsonObject) (p
 			o.terminate(exitCodeInternalError)
 		} else {
 			plugin.print("output", pluginOutput)
+
+			if *writeCredentials {
+				writeCredentialsToFiles(pluginOutput)
+			}
 		}
 	}
 
@@ -479,7 +513,7 @@ func (o *jsonObject) runTests(config jsonObject) bool {
 // main
 func main() {
 	app.Author("Lukas Burgey @ KIT within the INDIGO DataCloud Project")
-	app.Version("3.0.8")
+	app.Version("3.1.0")
 	globalOutput := jsonObject{}
 
 	switch kingpin.MustParse(app.Parse(os.Args[1:])) {
