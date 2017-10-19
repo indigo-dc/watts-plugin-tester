@@ -35,11 +35,11 @@ var (
 		v.ObjKV("mandatory", v.Boolean()),
 	)
 
-	// TODO dirty 
-	// we circumvent some "bugs"/quirks in the watts api here by differentiating between actions
+	// PluginInputScheme Scheme to check the input of a plugin against
 	PluginInputScheme = v.Or(
 		v.Object(
 			v.ObjKV("action", v.String(v.StrIs("parameter"))),
+			v.ObjKV("watts_version", v.String()),
 		),
 		v.Object(
 			v.ObjKV("action", v.String()),
@@ -76,6 +76,7 @@ var (
 		),
 	}
 
+	// WattsSchemes Scheme to validate specific input from watts against
 	WattsSchemes = map[string](map[string]v.Validator){
 		"1.0.0": map[string]v.Validator{
 			"parameter": v.Object(
