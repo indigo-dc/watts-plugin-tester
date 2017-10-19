@@ -34,10 +34,6 @@ var (
 		v.ObjKV("type", v.String()),
 		v.ObjKV("mandatory", v.Boolean()),
 	)
-	PluginInputMinimalScheme = v.Object(
-		v.ObjKV("watts_version", v.String()),
-		v.ObjKV("action", v.String()),
-	)
 	PluginInputScheme = v.Object(
 		v.ObjKV("watts_version", v.String()),
 		v.ObjKV("watts_userid", v.String()),
