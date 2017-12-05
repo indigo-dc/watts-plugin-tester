@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/imdario/mergo"
-	"github.com/indigo-dc/watts-plugin-tester/schemes"
+	"github.com/watts-kit/watts-plugin-tester/schemes"
 	"github.com/kalaspuffar/base64url"
 	"gopkg.in/alecthomas/kingpin.v2"
 	"io/ioutil"
