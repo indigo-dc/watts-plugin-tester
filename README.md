@@ -5,8 +5,8 @@ build
 ---
 ```
 go get   github.com/indigo-dc/watts-plugin-tester
-go build github.com/indigo-dc/watts-plugin-tester
-(with a set GOPATH)
+
+This will build the tester and install it at $GOPATH/bin
 ```
 or
 ```
