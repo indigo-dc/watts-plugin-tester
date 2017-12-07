@@ -316,7 +316,7 @@ func version(pluginInput jsonObject) (version string) {
 	versionExtractor, _ := regexp.Compile("[^\"+v]+")
 	extractedVersion := versionExtractor.FindString(version)
 
-	if _, versionFound := schemes.WattsSchemes[extractedVersion]; !versionFound {
+	if _, versionFound := schemes.PluginOutputScheme[extractedVersion]; !versionFound {
 		extractedVersion = defaultWattsVersion
 	}
 
@@ -403,7 +403,7 @@ func (o *jsonObject) checkPluginOutput(pluginOutput interface{}, pluginInput jso
 	version := version(pluginInput)
 	action := pluginInput["action"].(string)
 
-	path, err := schemes.WattsSchemes[version][action].Validate(pluginOutput)
+	path, err := schemes.PluginOutputScheme[version][action].Validate(pluginOutput)
 	if err != nil {
 		o.print("result", "error")
 		o.print("description", fmt.Sprintf("Validation error %s at %s", err, path))
